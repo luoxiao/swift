@@ -3173,8 +3173,12 @@ void Parser::parseDeclDelayed() {
       } else if (auto *ED = dyn_cast<ExtensionDecl>(parent)) {
         ED->addMember(D);
       } else if (auto *SF = dyn_cast<SourceFile>(parent)) {
+        // FIXME: unify notification to ASTSourceFileScope with addMember
+        // mechanism used above
         SF->Decls.push_back(D);
-      }
+      } else
+        llvm_unreachable(
+            "ASTScope lookup needs delayed Decls to be included in parents");
     }
   });
 }
