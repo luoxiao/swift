@@ -1277,12 +1277,12 @@ std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
     llvm::errs() << "\n";
   };
 
-  dump("BEFORE");
+  //HERE dump("BEFORE");
 
   // Common case is building first time and is sorted
   if (!std::is_sorted(sortedMembers.begin(), sortedMembers.end(), cmp))
     std::stable_sort(sortedMembers.begin(), sortedMembers.end(), cmp);
-  dump("AFTER");
+  //HERE dump("AFTER");
   return sortedMembers;
 }
 
