@@ -716,6 +716,7 @@ DeclRange IterableDeclContext::getMembers() const {
 void IterableDeclContext::addMember(Decl *member, Decl *Hint) {
   // Add the member to the list of declarations without notification.
   addMemberSilently(member, Hint);
+  updateMemberCount(member);
 
   // Notify our parent declaration that we have added the member, which can
   // be used to update the lookup tables.
@@ -760,6 +761,11 @@ void IterableDeclContext::addMemberSilently(Decl *member, Decl *hint) const {
     FirstDeclAndLazyMembers.setPointer(member);
   }
   LastDeclAndKind.setPointer(member);
+}
+
+void IterableDeclContext::updateMemberCount(const Decl *member) {
+  if (!member->isImplicit())
+    ++explicitMemberCount;
 }
 
 void IterableDeclContext::setMemberLoader(LazyMemberLoader *loader,
