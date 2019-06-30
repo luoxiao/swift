@@ -585,7 +585,10 @@ public:
   virtual bool shouldHaveABody() const { return false; }
 
   ASTScopeImpl *expandMe(ScopeCreator &scopeCreator) override;
-  virtual void expandBody(ScopeCreator &);
+
+  /// When creating the body scope \p inOrderToIncorporateAdditions is false
+  /// When recreating it to incorperate additions, it is true.
+  virtual void expandBody(ScopeCreator &, bool inOrderToIncorporateAdditions);
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
@@ -649,12 +652,11 @@ public:
   virtual SourceRange getBraces() const = 0;
   bool shouldHaveABody() const override { return true; }
   bool doesDeclHaveABody() const override;
-  void expandBody(ScopeCreator &) override;
+  void expandBody(ScopeCreator &, bool inOrderToIncorporateAdditions) override;
   void reexpandIfObsolete(ScopeCreator &, NullablePtr<raw_ostream>) override;
   void reexpandBodyIfObsolete(ScopeCreator &, NullablePtr<raw_ostream>);
 
 private:
-  void reexpandBody(ScopeCreator &);
   std::vector<Decl *> getMembersInSourceOrder(ScopeCreator &) const;
 };
 

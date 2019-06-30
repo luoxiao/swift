@@ -939,7 +939,7 @@ ASTScopeImpl *GenericTypeOrExtensionWholePortion::expandScope(
 ASTScopeImpl *
 IterableTypeBodyPortion::expandScope(GenericTypeOrExtensionScope *scope,
                                      ScopeCreator &scopeCreator) const {
-  scope->expandBody(scopeCreator);
+  scope->expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/false);
   return scope->getParent().get();
 }
 
@@ -1124,10 +1124,66 @@ void *ScopeCreator::operator new(size_t bytes, const ASTContext &ctx,
 
 #pragma mark - expandBody
 
-void GenericTypeOrExtensionScope::expandBody(ScopeCreator &) {}
+void GenericTypeOrExtensionScope::expandBody(
+    ScopeCreator &, bool inOrderToIncorporateAdditions) {}
 
-void IterableTypeScope::expandBody(ScopeCreator &scopeCreator) {
-  reexpandBody(scopeCreator);
+void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
+                                   const bool inOrderToIncorporateAdditions) {
+
+  const SourceManager &SM = scopeCreator.getASTContext().SourceMgr;
+  auto newMembers = getMembersInSourceOrder(scopeCreator);
+
+  const Children oldChildren = getAndDisownChildren();
+
+  auto nextOldScope = oldChildren.begin();
+  auto nextNewMember = newMembers.begin();
+  //  llvm::errs() << "HERE new mem\n\n";
+  //  for (auto *m: newMembers) {
+  //    m->dump();
+  //    llvm::errs() << "\n";
+  //  }
+  //  llvm::errs() << "\n\n end new em HERE\n";
+  while (true) {
+    auto reuseOldScope = [&] {
+      addChild(*nextOldScope++, scopeCreator.getASTContext());
+    };
+    auto addNewScope = [&] {
+      auto *nextNew = *nextNewMember++;
+      if (!scopeCreator.isDuplicate(
+              nextNew,
+              /*registerDuplicate=*/!inOrderToIncorporateAdditions))
+        scopeCreator.createScopeFor(nextNew, this);
+      else {
+        //          llvm::errs() << "HERE dup ";
+        //          nextNew->dump();
+      }
+    };
+
+    if (nextOldScope == oldChildren.end()) {
+      while (nextNewMember != newMembers.end())
+        addNewScope();
+      break;
+    }
+    if (nextNewMember == newMembers.end()) {
+      while (nextOldScope != oldChildren.end())
+        reuseOldScope();
+      break;
+    }
+    auto oldEnd = (*nextOldScope)->getDecl().get()->getEndLoc();
+    auto newEnd = (*nextNewMember)->getEndLoc();
+    if (SM.isBeforeInBuffer(oldEnd, newEnd))
+      reuseOldScope();
+    else if (SM.isBeforeInBuffer(newEnd, oldEnd))
+      addNewScope();
+    else {
+      assert((*nextOldScope)->getDecl() == *nextNewMember &&
+             "Decls should be fermions.");
+      reuseOldScope();
+      ++nextNewMember;
+    }
+  }
+  memberCount =
+      scopeCreator.countDecls(getIterableDeclContext().get()->getMembers());
 }
 
 #pragma mark - reexpandIfObsolete
@@ -1162,68 +1218,14 @@ void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
     *os.get() << "*** Pre reexpansion: ***\n";
     print(*os.get());
   }
-  ensureSourceRangesAreCorrectWhenAddingDescendants(
-      [&] { reexpandBody(scopeCreator); });
+  ensureSourceRangesAreCorrectWhenAddingDescendants([&] {
+    expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/true);
+  });
   if (os) {
     *os.get() << "\n***Post reexpansion: ***\n";
     print(*os.get());
     *os.get() << "\n";
   }
-}
-
-void IterableTypeScope::reexpandBody(ScopeCreator &scopeCreator) {
-  const SourceManager &SM = scopeCreator.getASTContext().SourceMgr;
-  auto newMembers = getMembersInSourceOrder(scopeCreator);
-
-  const Children oldChildren = getAndDisownChildren();
-
-  auto nextOldScope = oldChildren.begin();
-  auto nextNewMember = newMembers.begin();
-  //  llvm::errs() << "HERE new mem\n\n";
-  //  for (auto *m: newMembers) {
-  //    m->dump();
-  //    llvm::errs() << "\n";
-  //  }
-  //  llvm::errs() << "\n\n end new em HERE\n";
-  while (true) {
-    auto reuseOldScope = [&] {
-      addChild(*nextOldScope++, scopeCreator.getASTContext());
-    };
-    auto addNewScope = [&] {
-      auto *nextNew = *nextNewMember++;
-      if (!scopeCreator.isDuplicate(nextNew, false))
-        scopeCreator.createScopeFor(nextNew, this);
-      else {
-        //          llvm::errs() << "HERE dup ";
-        //          nextNew->dump();
-      }
-    };
-
-    if (nextOldScope == oldChildren.end()) {
-      while (nextNewMember != newMembers.end())
-        addNewScope();
-      break;
-    }
-    if (nextNewMember == newMembers.end()) {
-      while (nextOldScope != oldChildren.end())
-        reuseOldScope();
-      break;
-    }
-    auto oldEnd = (*nextOldScope)->getDecl().get()->getEndLoc();
-    auto newEnd = (*nextNewMember)->getEndLoc();
-    if (SM.isBeforeInBuffer(oldEnd, newEnd))
-      reuseOldScope();
-    else if (SM.isBeforeInBuffer(newEnd, oldEnd))
-      addNewScope();
-    else {
-      assert((*nextOldScope)->getDecl() == *nextNewMember &&
-             "Decls should be fermions.");
-      reuseOldScope();
-      ++nextNewMember;
-    }
-  }
-  memberCount =
-      scopeCreator.countDecls(getIterableDeclContext().get()->getMembers());
 }
 
 std::vector<Decl *>
