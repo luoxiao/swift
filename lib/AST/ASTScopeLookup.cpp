@@ -62,7 +62,7 @@ const ASTScopeImpl *ASTScopeImpl::findStartingScopeForLookup(
   if (name.isOperator())
     return fileScope; // operators always at file scope
 
-  const auto innermost = fileScope->findInnermostEnclosingScope(loc);
+  const auto innermost = fileScope->findInnermostEnclosingScope(loc, nullptr);
 
   // The legacy lookup code gets passed both a SourceLoc and a starting context.
   // However, our ultimate intent is for clients to not have to pass in a
@@ -100,17 +100,20 @@ const ASTScopeImpl *ASTScopeImpl::findStartingScopeForLookup(
 }
 
 const ASTScopeImpl *
-ASTScopeImpl::findInnermostEnclosingScope(SourceLoc loc) const {
+ASTScopeImpl::findInnermostEnclosingScope(SourceLoc loc,
+                                          NullablePtr<raw_ostream> os) {
   SourceManager &sourceMgr = getSourceManager();
+  ScopeCreator &scopeCreator = getScopeCreator();
 
   const auto *s = this;
-  for (NullablePtr<const ASTScopeImpl> c;
+  for (NullablePtr<ASTScopeImpl> c;
        (c = s->findChildContaining(loc, sourceMgr)); s = c.get()) {
+    c.get()->reexpandIfObsolete(scopeCreator, os);
   }
   return s;
 }
 
-NullablePtr<const ASTScopeImpl>
+NullablePtr<ASTScopeImpl>
 ASTScopeImpl::findChildContaining(SourceLoc loc,
                                   SourceManager &sourceMgr) const {
   // Use binary search to find the child that contains this location.

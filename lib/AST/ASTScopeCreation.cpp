@@ -45,6 +45,7 @@ class ScopeCreator final {
 
 public:
   ASTSourceFileScope *const sourceFileScope;
+  ASTContext &getASTContext() const { return ctx; }
 
 private:
   /// Catch duplicate nodes in the AST
@@ -535,8 +536,10 @@ void ASTScopeImpl::addChild(ASTScopeImpl *child, ASTContext &ctx) {
   // If this is the first time we've added children, notify the ASTContext
   // that there's a SmallVector that needs to be cleaned up.
   // FIXME: If we had access to SmallVector::isSmall(), we could do better.
-  if (storedChildren.empty())
+  if (storedChildren.empty() && !haveAddedCleanup) {
     ctx.addDestructorCleanup(storedChildren);
+    haveAddedCleanup = true;
+  }
   storedChildren.push_back(child);
   assert(!child->getParent() && "child should not already have parent");
   child->parent = this;
@@ -928,12 +931,7 @@ ASTScopeImpl *GenericTypeOrExtensionWholePortion::expandScope(
 ASTScopeImpl *
 IterableTypeBodyPortion::expandScope(GenericTypeOrExtensionScope *scope,
                                      ScopeCreator &scopeCreator) const {
-  if (auto *idc = scope->getIterableDeclContext().getPtrOrNull()) {
-    for (auto member : idc->getMembers()) {
-      if (!scopeCreator.isDuplicate(member))
-        scopeCreator.createScopeFor(member, scope);
-    }
-  }
+  scope->expandBody(scopeCreator);
   return scope->getParent().get();
 }
 
@@ -1115,3 +1113,124 @@ void *ScopeCreator::operator new(size_t bytes, const ASTContext &ctx,
                                  unsigned alignment) {
   return ctx.Allocate(bytes, alignment);
 }
+
+#pragma mark - expandBody
+
+void GenericTypeOrExtensionScope::expandBody(ScopeCreator &) {}
+
+void IterableTypeScope::expandBody(ScopeCreator &scopeCreator) {
+  reexpandBody(scopeCreator);
+}
+
+#pragma mark - reexpandIfObsolete
+
+void ASTScopeImpl::reexpandIfObsolete(ScopeCreator &,
+                                      NullablePtr<raw_ostream>) {}
+
+void IterableTypeScope::reexpandIfObsolete(ScopeCreator &scopeCreator,
+                                           NullablePtr<raw_ostream> os) {
+  portion->reexpandScopeIfObsolete(this, scopeCreator, os);
+}
+
+void Portion::reexpandScopeIfObsolete(IterableTypeScope *, ScopeCreator &,
+                                      NullablePtr<raw_ostream>) const {}
+
+void IterableTypeBodyPortion::reexpandScopeIfObsolete(
+    IterableTypeScope *scope, ScopeCreator &scopeCreator,
+    NullablePtr<raw_ostream> os) const {
+  scope->reexpandBodyIfObsolete(scopeCreator, os);
+}
+
+/// TODO: use a better timestamp!
+static unsigned countDecls(DeclRange dr) {
+  return std::count_if(dr.begin(), dr.end(), [&](Decl *) { return true; });
+}
+
+void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
+                                               NullablePtr<raw_ostream> os) {
+  auto *const idc = getIterableDeclContext().getPtrOrNull();
+  if (!idc)
+    return;
+  const auto newMemberCount = countDecls(idc->getMembers());
+  if (memberCount == newMemberCount)
+    return;
+  if (os) {
+    *os.get() << "*** Pre reexpansion: ***\n";
+    print(*os.get());
+  }
+  ensureSourceRangesAreCorrectWhenAddingDescendants(
+      [&] { reexpandBody(scopeCreator); });
+  if (os) {
+    *os.get() << "\n***Post reexpansion: ***\n";
+    print(*os.get());
+    *os.get() << "\n";
+  }
+}
+
+void IterableTypeScope::reexpandBody(ScopeCreator &scopeCreator) {
+  const SourceManager &SM = scopeCreator.getASTContext().SourceMgr;
+  auto newMembers = getScopeworthyMembersInSourceOrder(scopeCreator);
+
+  const Children oldChildren = getAndDisownChildren();
+
+  auto nextOldScope = oldChildren.begin();
+  auto nextNewMember = newMembers.begin();
+  while (true) {
+    auto reuseOldScope = [&] {
+      addChild(*nextOldScope++, scopeCreator.getASTContext());
+    };
+    auto addNewScope = [&] {
+      auto *nextNew = *nextNewMember++;
+      if (!scopeCreator.isDuplicate(nextNew))
+        scopeCreator.createScopeFor(nextNew, this);
+    };
+
+    if (nextOldScope == oldChildren.end()) {
+      while (nextNewMember != newMembers.end())
+        addNewScope();
+      break;
+    }
+    if (nextNewMember == newMembers.end()) {
+      while (nextOldScope != oldChildren.end())
+        reuseOldScope();
+      break;
+    }
+    auto oldEnd = (*nextOldScope)->getDecl().get()->getEndLoc();
+    auto newEnd = (*nextNewMember)->getEndLoc();
+    if (SM.isBeforeInBuffer(oldEnd, newEnd))
+      reuseOldScope();
+    else if (SM.isBeforeInBuffer(newEnd, oldEnd))
+      addNewScope();
+    else {
+      assert((*nextOldScope)->getDecl() == *nextNewMember &&
+             "Decls should be fermions.");
+      reuseOldScope();
+      ++nextNewMember;
+    }
+  }
+  memberCount = countDecls(getIterableDeclContext().get()->getMembers());
+}
+
+std::vector<Decl *> IterableTypeScope::getScopeworthyMembersInSourceOrder(
+    ScopeCreator &scopeCreator) const {
+  std::vector<Decl *> sortedMembers;
+  for (auto *d : getIterableDeclContext().get()->getMembers())
+    if (scopeCreator.shouldCreateScope(ASTNode(d)))
+      sortedMembers.push_back(d);
+
+  const auto &SM = getSourceManager();
+  auto cmp = [&](const Decl *d1, const Decl *d2) {
+    return SM.isBeforeInBuffer(d1->getEndLoc(), d2->getEndLoc());
+  };
+  // Common case is building first time and is sorted
+  if (!std::is_sorted(sortedMembers.begin(), sortedMembers.end(), cmp))
+    std::stable_sort(sortedMembers.begin(), sortedMembers.end(), cmp);
+  return sortedMembers;
+}
+
+#pragma mark getScopeCreator
+ScopeCreator &ASTScopeImpl::getScopeCreator() {
+  return getParent().get()->getScopeCreator();
+}
+
+ScopeCreator &ASTSourceFileScope::getScopeCreator() { return *scopeCreator; }

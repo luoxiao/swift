@@ -53,8 +53,7 @@ Optional<bool> ASTScope::computeIsCascadingUse(
 
 void ASTScope::dump() const { impl->dump(); }
 void ASTScope::print(llvm::raw_ostream &out) const { impl->print(out); }
-void ASTScope::dumpOneScopeMapLocation(
-    std::pair<unsigned, unsigned> lineCol) const {
+void ASTScope::dumpOneScopeMapLocation(std::pair<unsigned, unsigned> lineCol) {
   impl->dumpOneScopeMapLocation(lineCol);
 }
 

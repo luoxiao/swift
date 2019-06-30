@@ -38,7 +38,7 @@ using namespace ast_scope;
 void ASTScopeImpl::dump() const { print(llvm::errs(), 0, false); }
 
 void ASTScopeImpl::dumpOneScopeMapLocation(
-    std::pair<unsigned, unsigned> lineColumn) const {
+    std::pair<unsigned, unsigned> lineColumn) {
   auto bufferID = getSourceFile()->getBufferID();
   if (!bufferID) {
     llvm::errs() << "***No buffer, dumping all scopes***";
@@ -52,7 +52,7 @@ void ASTScopeImpl::dumpOneScopeMapLocation(
 
   llvm::errs() << "***Scope at " << lineColumn.first << ":" << lineColumn.second
                << "***\n";
-  auto *locScope = findInnermostEnclosingScope(loc);
+  auto *locScope = findInnermostEnclosingScope(loc, &llvm::errs());
   locScope->print(llvm::errs(), 0, false, false);
 
   // Dump the AST context, too.

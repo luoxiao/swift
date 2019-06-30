@@ -119,6 +119,9 @@ private:
   /// Child scopes, sorted by source range.
   Children storedChildren;
 
+  /// Can clear storedChildren, so must remember this
+  bool haveAddedCleanup = false;
+
   // Must be updated after last child is added and after last child's source
   // position is known
   Optional<SourceRange> cachedSourceRange;
@@ -158,9 +161,17 @@ protected:
   NullablePtr<const ASTScopeImpl> getParent() const { return parent; }
 
   const Children &getChildren() const { return storedChildren; }
+  const Children getAndDisownChildren() {
+    Children r = getChildren();
+    storedChildren.clear();
+    for (auto *c : r)
+      c->emancipate(); // so it can be added back without tripping assertion
+    return r;
+  }
   void addChild(ASTScopeImpl *child, ASTContext &);
 
 private:
+  void emancipate() { parent = nullptr; }
   NullablePtr<ASTScopeImpl> getPriorSibling() const;
 
 public:
@@ -252,7 +263,7 @@ public:
   LLVM_ATTRIBUTE_DEPRECATED(void dump() const LLVM_ATTRIBUTE_USED,
                             "only for use within the debugger");
 
-  void dumpOneScopeMapLocation(std::pair<unsigned, unsigned> lineColumn) const;
+  void dumpOneScopeMapLocation(std::pair<unsigned, unsigned> lineColumn);
 
 private:
   llvm::raw_ostream &verificationError() const;
@@ -275,6 +286,9 @@ public:
 
   bool isATypeDeclScope() const;
 
+  virtual void reexpandIfObsolete(ScopeCreator &, NullablePtr<raw_ostream>);
+
+  virtual ScopeCreator &getScopeCreator();
 
 #pragma mark - - creation queries
 public:
@@ -305,11 +319,13 @@ protected:
   virtual bool doesContextMatchStartingContext(const DeclContext *) const;
 
 protected:
-  const ASTScopeImpl *findInnermostEnclosingScope(SourceLoc) const;
+  /// Not const because may reexpand some scopes.
+  const ASTScopeImpl *findInnermostEnclosingScope(SourceLoc,
+                                                  NullablePtr<raw_ostream>);
 
 private:
-  NullablePtr<const ASTScopeImpl>
-  findChildContaining(SourceLoc loc, SourceManager &sourceMgr) const;
+  NullablePtr<ASTScopeImpl> findChildContaining(SourceLoc loc,
+                                                SourceManager &sourceMgr) const;
 
 #pragma mark - - lookup- per scope
 protected:
@@ -405,9 +421,9 @@ protected:
   ancestorWithDeclSatisfying(function_ref<bool(const Decl *)> predicate) const;
 }; // end of ASTScopeImpl
 
-#pragma mark specific scope classes
+#pragma mark - specific scope classes
 
-  /// The root of the scope tree.
+/// The root of the scope tree.
 class ASTSourceFileScope final : public ASTScopeImpl {
 public:
   SourceFile *const SF;
@@ -428,7 +444,7 @@ protected:
   void printSpecifics(llvm::raw_ostream &out) const override;
 
 public:
-  virtual NullablePtr<DeclContext> getDeclContext() const override;
+  NullablePtr<DeclContext> getDeclContext() const override;
 
   void addNewDeclsToTree();
 
@@ -437,46 +453,49 @@ public:
 
   ASTScopeImpl *expandMe(ScopeCreator &scopeCreator) override;
 
+  ScopeCreator &getScopeCreator() override;
+
 private:
   void expandAScopeThatDoesNotCreateANewInsertionPoint(ScopeCreator &);
+};
 
+class Portion {
 public:
-  };
+  const char *portionName;
+  Portion(const char *n) : portionName(n) {}
+  virtual ~Portion() {}
 
-  class Portion {
-  public:
-    const char *portionName;
-    Portion(const char *n) : portionName(n) {}
-    virtual ~Portion() {}
-    
-    // Make vanilla new illegal for ASTScopes.
-    void *operator new(size_t bytes) = delete;
-    // Need this because have virtual destructors
-    void operator delete(void *data) {}
-    
-    // Only allow allocation of scopes using the allocator of a particular source
-    // file.
-    void *operator new(size_t bytes, const ASTContext &ctx,
-                       unsigned alignment = alignof(ASTScopeImpl));
-    void *operator new(size_t Bytes, void *Mem) {
-      assert(Mem);
-      return Mem;
-    }
+  // Make vanilla new illegal for ASTScopes.
+  void *operator new(size_t bytes) = delete;
+  // Need this because have virtual destructors
+  void operator delete(void *data) {}
 
-    /// Return the new insertion point
-    virtual ASTScopeImpl *expandScope(GenericTypeOrExtensionScope *,
-                                      ScopeCreator &) const = 0;
+  // Only allow allocation of scopes using the allocator of a particular source
+  // file.
+  void *operator new(size_t bytes, const ASTContext &ctx,
+                     unsigned alignment = alignof(ASTScopeImpl));
+  void *operator new(size_t Bytes, void *Mem) {
+    assert(Mem);
+    return Mem;
+  }
 
-    virtual SourceRange getChildlessSourceRangeOf(
-        const GenericTypeOrExtensionScope *scope) const = 0;
+  /// Return the new insertion point
+  virtual ASTScopeImpl *expandScope(GenericTypeOrExtensionScope *,
+                                    ScopeCreator &) const = 0;
 
-    /// Returns isDone and isCascadingUse
-    virtual bool lookupMembersOf(const GenericTypeOrExtensionScope *scope,
-                                 ArrayRef<const ASTScopeImpl *>,
-                                 ASTScopeImpl::DeclConsumer consumer) const;
+  virtual SourceRange
+  getChildlessSourceRangeOf(const GenericTypeOrExtensionScope *scope) const = 0;
 
-    virtual NullablePtr<const ASTScopeImpl>
-    getLookupLimitFor(const GenericTypeOrExtensionScope *) const;
+  /// Returns isDone and isCascadingUse
+  virtual bool lookupMembersOf(const GenericTypeOrExtensionScope *scope,
+                               ArrayRef<const ASTScopeImpl *>,
+                               ASTScopeImpl::DeclConsumer consumer) const;
+
+  virtual NullablePtr<const ASTScopeImpl>
+  getLookupLimitFor(const GenericTypeOrExtensionScope *) const;
+
+  virtual void reexpandScopeIfObsolete(IterableTypeScope *, ScopeCreator &,
+                                       NullablePtr<raw_ostream>) const;
   };
 
   // For the whole Decl scope of a GenericType or an Extension
@@ -494,29 +513,29 @@ public:
 
     NullablePtr<const ASTScopeImpl>
     getLookupLimitFor(const GenericTypeOrExtensionScope *) const override;
-};
+  };
 
-/// GenericTypeOrExtension = GenericType or Extension
-class GenericTypeOrExtensionWhereOrBodyPortion : public Portion {
-public:
-  GenericTypeOrExtensionWhereOrBodyPortion(const char *n) : Portion(n) {}
-  virtual ~GenericTypeOrExtensionWhereOrBodyPortion() {}
+  /// GenericTypeOrExtension = GenericType or Extension
+  class GenericTypeOrExtensionWhereOrBodyPortion : public Portion {
+  public:
+    GenericTypeOrExtensionWhereOrBodyPortion(const char *n) : Portion(n) {}
+    virtual ~GenericTypeOrExtensionWhereOrBodyPortion() {}
 
-  bool lookupMembersOf(const GenericTypeOrExtensionScope *scope,
-                       ArrayRef<const ASTScopeImpl *>,
-                       ASTScopeImpl::DeclConsumer consumer) const override;
+    bool lookupMembersOf(const GenericTypeOrExtensionScope *scope,
+                         ArrayRef<const ASTScopeImpl *>,
+                         ASTScopeImpl::DeclConsumer consumer) const override;
 
-private:
-  /// A client needs to know if a lookup result required the dynamic implicit
-  /// self value. It is required if the lookup originates from a method body or
-  /// a lazy pattern initializer. So, one approach would be to call the consumer
-  /// to find members right from those scopes. However, because members aren't
-  /// the first things searched, generics are, that approache ends up
-  /// duplicating code from the \c GenericTypeOrExtensionScope. So we take the
-  /// approach of doing those lookups there, and using this function to compute
-  /// the selfDC from the history.
-  static NullablePtr<DeclContext>
-  computeSelfDC(ArrayRef<const ASTScopeImpl *> history);
+  private:
+    /// A client needs to know if a lookup result required the dynamic implicit
+    /// self value. It is required if the lookup originates from a method body
+    /// or a lazy pattern initializer. So, one approach would be to call the
+    /// consumer to find members right from those scopes. However, because
+    /// members aren't the first things searched, generics are, that approache
+    /// ends up duplicating code from the \c GenericTypeOrExtensionScope. So we
+    /// take the approach of doing those lookups there, and using this function
+    /// to compute the selfDC from the history.
+    static NullablePtr<DeclContext>
+    computeSelfDC(ArrayRef<const ASTScopeImpl *> history);
 };
 
 /// Behavior specific to representing the trailing where clause of a
@@ -546,6 +565,9 @@ public:
                             ScopeCreator &) const override;
   SourceRange
   getChildlessSourceRangeOf(const GenericTypeOrExtensionScope *) const override;
+
+  void reexpandScopeIfObsolete(IterableTypeScope *, ScopeCreator &,
+                               NullablePtr<raw_ostream>) const override;
 };
 
 /// GenericType or Extension scope
@@ -563,6 +585,7 @@ public:
   virtual bool shouldHaveABody() const { return false; }
 
   ASTScopeImpl *expandMe(ScopeCreator &scopeCreator) override;
+  virtual void expandBody(ScopeCreator &);
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
@@ -613,6 +636,12 @@ protected:
 };
 
 class IterableTypeScope : public GenericTypeScope {
+  /// Because of \c parseDelayedDecl members can get added after the tree is
+  /// constructed, and they can be out of order. Detect this happening by
+  /// remembering the member count.
+  /// TODO: unify with \c numberOfDeclsAlreadySeen
+  unsigned memberCount = 0;
+
 public:
   IterableTypeScope(const Portion *p) : GenericTypeScope(p) {}
   virtual ~IterableTypeScope() {}
@@ -620,6 +649,13 @@ public:
   virtual SourceRange getBraces() const = 0;
   bool shouldHaveABody() const override { return true; }
   bool doesDeclHaveABody() const override;
+  void expandBody(ScopeCreator &) override;
+  void reexpandIfObsolete(ScopeCreator &, NullablePtr<raw_ostream>) override;
+  void reexpandBodyIfObsolete(ScopeCreator &, NullablePtr<raw_ostream>);
+
+private:
+  void reexpandBody(ScopeCreator &);
+  std::vector<Decl *> getScopeworthyMembersInSourceOrder(ScopeCreator &) const;
 };
 
 class NominalTypeScope final : public IterableTypeScope {
@@ -947,6 +983,7 @@ protected:
 public:
   NullablePtr<const void> addressForPrinting() const override { return decl; }
   bool isLastEntry() const;
+  NullablePtr<Decl> getDecl() const override { return decl; }
 };
 
 class PatternEntryDeclScope final : public AbstractPatternEntryScope {

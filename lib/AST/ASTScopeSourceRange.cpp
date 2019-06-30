@@ -431,7 +431,11 @@ void ASTScopeImpl::cacheSourceRangesOfSlice() {
        s = s->getParent().getPtrOrNull())
     s->cacheSourceRange();
 }
+
 void ASTScopeImpl::clearCachedSourceRangesOfMeAndAncestors() {
+  // An optimization: if my range isn't cached, my ancestors must not be
+  if (!cachedSourceRange)
+    return;
   clearSourceRangeCache();
   if (auto p = getParent())
     p.get()->clearCachedSourceRangesOfMeAndAncestors();
