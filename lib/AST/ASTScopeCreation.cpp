@@ -129,14 +129,6 @@ public:
     return true;
   }
 
-  /// TODO: use a better timestamp!
-  unsigned countDecls(DeclRange dr) const {
-    // implicit accessors get added on subsequent rounds, but they don't matter
-    return std::count_if(dr.begin(), dr.end(), [&](Decl *d) {
-      return shouldCreateScope(ASTNode(d));
-    });
-  }
-
   template <typename Scope, typename... Args>
   /// Create a new scope of class ChildScope initialized with a ChildElement,
   /// expandScope it,
@@ -1131,7 +1123,7 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
                                    const bool inOrderToIncorporateAdditions) {
 
   const SourceManager &SM = scopeCreator.getASTContext().SourceMgr;
-  auto newMembers = getMembersInSourceOrder(scopeCreator);
+  auto newMembers = getExplicitMembersInSourceOrder(scopeCreator);
 
   const Children oldChildren = getAndDisownChildren();
 
@@ -1182,8 +1174,8 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
       ++nextNewMember;
     }
   }
-  memberCount =
-      scopeCreator.countDecls(getIterableDeclContext().get()->getMembers());
+  explicitMemberCount =
+      getIterableDeclContext().get()->getExplicitMemberCount();
 }
 
 #pragma mark - reexpandIfObsolete
@@ -1210,8 +1202,7 @@ void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
   auto *const idc = getIterableDeclContext().getPtrOrNull();
   if (!idc)
     return;
-  const auto newMemberCount = scopeCreator.countDecls(idc->getMembers());
-  if (memberCount == newMemberCount)
+  if (explicitMemberCount == idc->getExplicitMemberCount())
     return;
   // os = &llvm::errs(); // HERE
   if (os) {
@@ -1228,10 +1219,11 @@ void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
   }
 }
 
-std::vector<Decl *>
-IterableTypeScope::getMembersInSourceOrder(ScopeCreator &scopeCreator) const {
+std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
+    ScopeCreator &scopeCreator) const {
   std::vector<Decl *> sortedMembers;
   for (auto *d : getIterableDeclContext().get()->getMembers())
+    if (!d->isImplicit())
       sortedMembers.push_back(d);
 
   const auto &SM = getSourceManager();

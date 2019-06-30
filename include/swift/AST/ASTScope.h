@@ -643,7 +643,7 @@ class IterableTypeScope : public GenericTypeScope {
   /// constructed, and they can be out of order. Detect this happening by
   /// remembering the member count.
   /// TODO: unify with \c numberOfDeclsAlreadySeen
-  unsigned memberCount = 0;
+  unsigned explicitMemberCount = 0;
 
 public:
   IterableTypeScope(const Portion *p) : GenericTypeScope(p) {}
@@ -657,7 +657,7 @@ public:
   void reexpandBodyIfObsolete(ScopeCreator &, NullablePtr<raw_ostream>);
 
 private:
-  std::vector<Decl *> getMembersInSourceOrder(ScopeCreator &) const;
+  std::vector<Decl *> getExplicitMembersInSourceOrder(ScopeCreator &) const;
 };
 
 class NominalTypeScope final : public IterableTypeScope {

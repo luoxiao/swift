@@ -728,6 +728,9 @@ public:
   /// is inserted immediately after the hint.
   void addMember(Decl *member, Decl *hint = nullptr);
 
+  /// See \c explicitMemberCount
+  unsigned getExplicitMemberCount() const { return explicitMemberCount; }
+
   /// Check whether there are lazily-loaded members.
   bool hasLazyMembers() const {
     return FirstDeclAndLazyMembers.getInt() & LazyMembers::Present;
