@@ -1141,9 +1141,7 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
     };
     auto addNewScope = [&] {
       auto *nextNew = *nextNewMember++;
-      if (!scopeCreator.isDuplicate(
-              nextNew,
-              /*registerDuplicate=*/!inOrderToIncorporateAdditions))
+      if (inOrderToIncorporateAdditions || !scopeCreator.isDuplicate(nextNew))
         scopeCreator.createScopeFor(nextNew, this);
       else {
         //          llvm::errs() << "HERE dup ";
@@ -1219,6 +1217,28 @@ void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
   }
 }
 
+/// The AST contains \c PatternBindingDecls and \c VarDecls which are
+/// mutually redundant. It's important that the \c PatternBindingDecls
+/// get processed first, so that the \c VarDecls are not rejected as
+/// duplicates, because that causes their accessors to be overlooked.
+/// This requirement is consistent with sorting by start location.
+static bool patternPreceedsVar(const Decl *d1, const Decl *d2,
+                               const bool comesBefore) {
+  const Decl *willBe1st;
+  const Decl *willBe2nd;
+  if (comesBefore) {
+    willBe1st = d1;
+    willBe2nd = d2;
+  } else {
+    willBe1st = d2;
+    willBe2nd = d1;
+  }
+
+  auto *vd = dyn_cast<VarDecl>(willBe1st);
+  auto *pbd = dyn_cast<PatternBindingDecl>(willBe2nd);
+  return !vd || !pbd || vd->getParentPatternBinding() != pbd;
+}
+
 std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
     ScopeCreator &scopeCreator) const {
   std::vector<Decl *> sortedMembers;
@@ -1228,11 +1248,41 @@ std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
 
   const auto &SM = getSourceManager();
   auto cmp = [&](const Decl *d1, const Decl *d2) {
-    return SM.isBeforeInBuffer(d1->getEndLoc(), d2->getEndLoc());
+    // In general, we sort by start location so the the child scopes
+    // are created in source order.
+    const bool comesBefore =
+        SM.isBeforeInBuffer(d1->getStartLoc(), d2->getStartLoc());
+    assert(patternPreceedsVar(d1, d2, comesBefore) &&
+           "Pattern must preceed var.");
+    return comesBefore;
   };
+
+  auto dump = [&](const char *m) {
+    llvm::errs() << "\n\n" << m << "\n";
+    PrintOptions options;
+    options.FunctionDefinitions = false;
+    options.TypeDefinitions = false;
+    options.VarInitializers = false;
+    // FIXME: Move all places where SIL printing is happening to explicit
+    // options. For example, see \c ProjectionPath::print.
+    options.PreferTypeRepr = false;
+    for (auto *d : sortedMembers) {
+      llvm::errs() << d << "  ";
+      auto bufferID = SM.findBufferContainingLoc(d->getStartLoc());
+      d->getSourceRange().print(llvm::errs(), SM, bufferID, false);
+      llvm::errs() << "  ";
+      d->print(llvm::errs(), options);
+      llvm::errs() << "\n";
+    }
+    llvm::errs() << "\n";
+  };
+
+  dump("BEFORE");
+
   // Common case is building first time and is sorted
   if (!std::is_sorted(sortedMembers.begin(), sortedMembers.end(), cmp))
     std::stable_sort(sortedMembers.begin(), sortedMembers.end(), cmp);
+  dump("AFTER");
   return sortedMembers;
 }
 
