@@ -755,10 +755,7 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
 
 void AbstractFunctionBodyScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  // We create body scopes when there is no body for source kit to complete
-  // erroneous code in bodies.
-  if (BraceStmt *braceStmt = decl->getBody())
-    ASTVisitorForScopeCreation().visitBraceStmt(braceStmt, this, scopeCreator);
+  expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/false);
 }
 
 void IfStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
@@ -1116,6 +1113,20 @@ void *ScopeCreator::operator new(size_t bytes, const ASTContext &ctx,
 
 #pragma mark - expandBody
 
+void AbstractFunctionBodyScope::expandBody(
+    ScopeCreator &scopeCreator, const bool inOrderToIncorporateAdditions) {
+  // We create body scopes when there is no body for source kit to complete
+  // erroneous code in bodies.
+  BraceStmt *braceStmt = decl->getBody();
+  if (bodyWhenLastExpanded != braceStmt) {
+    getAndDisownChildren();
+    if (braceStmt)
+      ASTVisitorForScopeCreation().visitBraceStmt(braceStmt, this,
+                                                  scopeCreator);
+  }
+  bodyWhenLastExpanded = decl->getBody();
+}
+
 void GenericTypeOrExtensionScope::expandBody(
     ScopeCreator &, bool inOrderToIncorporateAdditions) {}
 
@@ -1184,6 +1195,13 @@ void ASTScopeImpl::reexpandIfObsolete(ScopeCreator &,
 void IterableTypeScope::reexpandIfObsolete(ScopeCreator &scopeCreator,
                                            NullablePtr<raw_ostream> os) {
   portion->reexpandScopeIfObsolete(this, scopeCreator, os);
+}
+
+void AbstractFunctionBodyScope::reexpandIfObsolete(
+    ScopeCreator &scopeCreator, NullablePtr<raw_ostream> os) {
+  ensureSourceRangesAreCorrectWhenAddingDescendants([&] {
+    expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/true);
+  });
 }
 
 void Portion::reexpandScopeIfObsolete(IterableTypeScope *, ScopeCreator &,
