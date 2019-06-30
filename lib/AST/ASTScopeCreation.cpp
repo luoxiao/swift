@@ -1141,7 +1141,7 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
     };
     auto addNewScope = [&] {
       auto *nextNew = *nextNewMember++;
-      if (inOrderToIncorporateAdditions || !scopeCreator.isDuplicate(nextNew))
+      if (!scopeCreator.isDuplicate(nextNew))
         scopeCreator.createScopeFor(nextNew, this);
       else {
         //          llvm::errs() << "HERE dup ";
