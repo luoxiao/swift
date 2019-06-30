@@ -655,7 +655,7 @@ public:
 
 private:
   void reexpandBody(ScopeCreator &);
-  std::vector<Decl *> getScopeworthyMembersInSourceOrder(ScopeCreator &) const;
+  std::vector<Decl *> getMembersInSourceOrder(ScopeCreator &) const;
 };
 
 class NominalTypeScope final : public IterableTypeScope {

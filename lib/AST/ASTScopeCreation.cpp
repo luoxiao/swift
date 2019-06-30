@@ -129,6 +129,14 @@ public:
     return true;
   }
 
+  /// TODO: use a better timestamp!
+  unsigned countDecls(DeclRange dr) const {
+    // implicit accessors get added on subsequent rounds, but they don't matter
+    return std::count_if(dr.begin(), dr.end(), [&](Decl *d) {
+      return shouldCreateScope(ASTNode(d));
+    });
+  }
+
   template <typename Scope, typename... Args>
   /// Create a new scope of class ChildScope initialized with a ChildElement,
   /// expandScope it,
@@ -1141,19 +1149,15 @@ void IterableTypeBodyPortion::reexpandScopeIfObsolete(
   scope->reexpandBodyIfObsolete(scopeCreator, os);
 }
 
-/// TODO: use a better timestamp!
-static unsigned countDecls(DeclRange dr) {
-  return std::count_if(dr.begin(), dr.end(), [&](Decl *) { return true; });
-}
-
 void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
                                                NullablePtr<raw_ostream> os) {
   auto *const idc = getIterableDeclContext().getPtrOrNull();
   if (!idc)
     return;
-  const auto newMemberCount = countDecls(idc->getMembers());
+  const auto newMemberCount = scopeCreator.countDecls(idc->getMembers());
   if (memberCount == newMemberCount)
     return;
+  // os = &llvm::errs(); // HERE
   if (os) {
     *os.get() << "*** Pre reexpansion: ***\n";
     print(*os.get());
@@ -1169,20 +1173,30 @@ void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
 
 void IterableTypeScope::reexpandBody(ScopeCreator &scopeCreator) {
   const SourceManager &SM = scopeCreator.getASTContext().SourceMgr;
-  auto newMembers = getScopeworthyMembersInSourceOrder(scopeCreator);
+  auto newMembers = getMembersInSourceOrder(scopeCreator);
 
   const Children oldChildren = getAndDisownChildren();
 
   auto nextOldScope = oldChildren.begin();
   auto nextNewMember = newMembers.begin();
+  //  llvm::errs() << "HERE new mem\n\n";
+  //  for (auto *m: newMembers) {
+  //    m->dump();
+  //    llvm::errs() << "\n";
+  //  }
+  //  llvm::errs() << "\n\n end new em HERE\n";
   while (true) {
     auto reuseOldScope = [&] {
       addChild(*nextOldScope++, scopeCreator.getASTContext());
     };
     auto addNewScope = [&] {
       auto *nextNew = *nextNewMember++;
-      if (!scopeCreator.isDuplicate(nextNew))
+      if (!scopeCreator.isDuplicate(nextNew, false))
         scopeCreator.createScopeFor(nextNew, this);
+      else {
+        //          llvm::errs() << "HERE dup ";
+        //          nextNew->dump();
+      }
     };
 
     if (nextOldScope == oldChildren.end()) {
@@ -1208,14 +1222,14 @@ void IterableTypeScope::reexpandBody(ScopeCreator &scopeCreator) {
       ++nextNewMember;
     }
   }
-  memberCount = countDecls(getIterableDeclContext().get()->getMembers());
+  memberCount =
+      scopeCreator.countDecls(getIterableDeclContext().get()->getMembers());
 }
 
-std::vector<Decl *> IterableTypeScope::getScopeworthyMembersInSourceOrder(
-    ScopeCreator &scopeCreator) const {
+std::vector<Decl *>
+IterableTypeScope::getMembersInSourceOrder(ScopeCreator &scopeCreator) const {
   std::vector<Decl *> sortedMembers;
   for (auto *d : getIterableDeclContext().get()->getMembers())
-    if (scopeCreator.shouldCreateScope(ASTNode(d)))
       sortedMembers.push_back(d);
 
   const auto &SM = getSourceManager();
