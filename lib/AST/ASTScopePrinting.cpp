@@ -137,7 +137,11 @@ void ASTSourceFileScope::printSpecifics(
 }
 
 NullablePtr<const void> ASTScopeImpl::addressForPrinting() const {
-  if (auto *p = getDecl().getPtrOrNull())
+  if (auto *p = getDeclIfAny().getPtrOrNull())
+    return p;
+  if (auto *p = getStmtIfAny().getPtrOrNull())
+    return p;
+  if (auto *p = getExprIfAny().getPtrOrNull())
     return p;
   return nullptr;
 }

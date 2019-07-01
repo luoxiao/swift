@@ -255,6 +255,8 @@ public:
       pushIfNecessary(nodesToPrepend[i]);
   }
 
+  /// If isDuplicate is called to prevent creating a scope, the corresponding
+  /// scope class must implement removeFromDuplicates
   bool isDuplicate(ASTNode n, bool registerDuplicate = true) {
     if (auto *d = n.dyn_cast<Decl *>())
       return isDuplicate(d, registerDuplicate);
@@ -985,8 +987,7 @@ ASTScopeImpl *GenericTypeOrExtensionWholePortion::expandScope(
     return scope->getParent().get();
 
   auto *deepestScope = scopeCreator.createGenericParamScopes(
-      scope->getDecl().get(), scope->getGenericContext()->getGenericParams(),
-      scope);
+      scope->getDecl(), scope->getGenericContext()->getGenericParams(), scope);
   if (scope->getGenericContext()->getTrailingWhereClause())
     scope->createTrailingWhereClauseScope(deepestScope, scopeCreator);
   scope->createBodyScope(deepestScope, scopeCreator);
@@ -1111,7 +1112,7 @@ GenericParamScope::getEnclosingAbstractStorageDecl() const {
 }
 
 bool ASTScopeImpl::isATypeDeclScope() const {
-  Decl *const pd = getDecl().getPtrOrNull();
+  Decl *const pd = getDeclIfAny().getPtrOrNull();
   return pd && (isa<NominalTypeDecl>(pd) || isa<ExtensionDecl>(pd));
 }
 
@@ -1238,15 +1239,16 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
         reuseOldScope();
       break;
     }
-    auto oldEnd = (*nextOldScope)->getDecl().get()->getEndLoc();
+    // FIXME: assumes nextOldScope points to a scope with nonnull getDeclIfAny
+    auto *const oldDecl = (*nextOldScope)->getDeclIfAny().get();
+    auto oldEnd = oldDecl->getEndLoc();
     auto newEnd = (*nextNewMember)->getEndLoc();
     if (SM.isBeforeInBuffer(oldEnd, newEnd))
       reuseOldScope();
     else if (SM.isBeforeInBuffer(newEnd, oldEnd))
       addNewScope();
     else {
-      assert((*nextOldScope)->getDecl() == *nextNewMember &&
-             "Decls should be fermions.");
+      assert(oldDecl == *nextNewMember && "Decls should be fermions.");
       reuseOldScope();
       ++nextNewMember;
     }
@@ -1373,11 +1375,11 @@ std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
 }
 
 void ASTScopeImpl::removeFromDuplicates(ScopeCreator &scopeCreator) const {
-  if (auto *p = getDecl().getPtrOrNull())
+  if (auto *p = getDeclIfAny().getPtrOrNull())
     scopeCreator.removeFromDuplicates(p);
-  else if (auto *p = getStmt().getPtrOrNull())
+  else if (auto *p = getStmtIfAny().getPtrOrNull())
     scopeCreator.removeFromDuplicates(p);
-  else if (auto *p = getExpr().getPtrOrNull())
+  else if (auto *p = getExprIfAny().getPtrOrNull())
     scopeCreator.removeFromDuplicates(p);
 }
 

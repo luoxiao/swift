@@ -245,9 +245,9 @@ public: // public for debugging
 public:
   virtual ASTContext &getASTContext() const;
   virtual NullablePtr<DeclContext> getDeclContext() const;
-  virtual NullablePtr<Decl> getDecl() const { return nullptr; };
-  virtual NullablePtr<Stmt> getStmt() const { return nullptr; };
-  virtual NullablePtr<Expr> getExpr() const { return nullptr; };
+  virtual NullablePtr<Decl> getDeclIfAny() const { return nullptr; };
+  virtual NullablePtr<Stmt> getStmtIfAny() const { return nullptr; };
+  virtual NullablePtr<Expr> getExprIfAny() const { return nullptr; };
 
 #pragma mark - debugging and printing
 
@@ -596,6 +596,9 @@ public:
   /// When recreating it to incorperate additions, it is true.
   virtual void expandBody(ScopeCreator &, bool inOrderToIncorporateAdditions);
 
+  virtual Decl *getDecl() const = 0;
+  NullablePtr<Decl> getDeclIfAny() const override { return getDecl(); }
+
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
 
@@ -682,7 +685,7 @@ public:
     return decl;
   }
   GenericContext *getGenericContext() const override { return decl; }
-  NullablePtr<Decl> getDecl() const override { return decl; }
+  Decl *getDecl() const override { return decl; }
 
   SourceRange getBraces() const override;
   NullablePtr<const ASTScopeImpl> getLookupLimitForDecl() const override;
@@ -709,7 +712,7 @@ public:
   ASTScopeImpl *createTrailingWhereClauseScope(ASTScopeImpl *parent,
                                                ScopeCreator &) override;
   void createBodyScope(ASTScopeImpl *leaf, ScopeCreator &) override;
-  NullablePtr<Decl> getDecl() const override { return decl; }
+  Decl *getDecl() const override { return decl; }
   NullablePtr<const ASTScopeImpl> getLookupLimitForDecl() const override;
 protected:
   NullablePtr<const GenericParamList> genericParams() const override;
@@ -726,7 +729,7 @@ public:
   ASTScopeImpl *createTrailingWhereClauseScope(ASTScopeImpl *parent,
                                                ScopeCreator &) override;
   GenericContext *getGenericContext() const override { return decl; }
-  NullablePtr<Decl> getDecl() const override { return decl; }
+  Decl *getDecl() const override { return decl; }
 };
 
 class OpaqueTypeScope final : public GenericTypeScope {
@@ -738,7 +741,7 @@ public:
 
   std::string declKindName() const override { return "OpaqueType"; }
   GenericContext *getGenericContext() const override { return decl; }
-  NullablePtr<Decl> getDecl() const override { return decl; }
+  Decl *getDecl() const override { return decl; }
 };
 
 /// Since each generic parameter can "see" the preceeding ones,
@@ -810,8 +813,9 @@ protected:
 
 public:
   virtual NullablePtr<DeclContext> getDeclContext() const override;
-  
-  virtual NullablePtr<Decl> getDecl() const override { return decl; }
+
+  virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
+  Decl *getDecl() const { return decl; }
 
   NullablePtr<AbstractStorageDecl>
   getEnclosingAbstractStorageDecl() const override;
@@ -877,7 +881,8 @@ public:
   virtual NullablePtr<DeclContext> getDeclContext() const override {
     return decl;
   }
-  virtual NullablePtr<Decl> getDecl() const override { return decl; }
+  virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
+  Decl *getDecl() const { return decl; }
   static bool isAMethod(const AbstractFunctionDecl *);
 
 protected:
@@ -920,7 +925,8 @@ public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
   virtual NullablePtr<DeclContext> getDeclContext() const override;
-  virtual NullablePtr<Decl> getDecl() const override { return decl; }
+  virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
+  Decl *getDecl() const { return decl; }
 
 protected:
   Optional<bool>
@@ -996,9 +1002,9 @@ protected:
       function_ref<void(VarDecl *)> foundOne) const;
 
 public:
-  NullablePtr<const void> addressForPrinting() const override { return decl; }
   bool isLastEntry() const;
-  NullablePtr<Decl> getDecl() const override { return decl; }
+  NullablePtr<Decl> getDeclIfAny() const override { return decl; }
+  Decl *getDecl() const { return decl; }
 };
 
 class PatternEntryDeclScope final : public AbstractPatternEntryScope {
@@ -1036,7 +1042,6 @@ public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
   virtual NullablePtr<DeclContext> getDeclContext() const override;
-  virtual NullablePtr<Decl> getDecl() const override { return decl; }
 
   Optional<NullablePtr<DeclContext>> computeSelfDCForParent() const override;
 
@@ -1152,9 +1157,9 @@ private:
 public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
-  NullablePtr<const void> addressForPrinting() const override { return expr; }
   NullablePtr<DeclContext> getDeclContext() const override;
-  NullablePtr<Expr> getExpr() const override { return expr; }
+  NullablePtr<Expr> getExprIfAny() const override { return expr; }
+  Expr *getExpr() const { return expr; }
 };
 
 // In order for compatibility with existing lookup, closures are represented
@@ -1194,7 +1199,8 @@ private:
 public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
-  NullablePtr<Expr> getExpr() const override { return closureExpr; }
+  NullablePtr<Expr> getExprIfAny() const override { return closureExpr; }
+  Expr *getExpr() const { return closureExpr; }
 };
 
 /// For a closure with named parameters, this scope does the local bindings.
@@ -1258,7 +1264,8 @@ public:
   virtual NullablePtr<DeclContext> getDeclContext() const override {
     return decl;
   }
-  virtual NullablePtr<Decl> getDecl() const override { return decl; }
+  virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
+  Decl *getDecl() const { return decl; }
 };
 
 /// The \c _@specialize attribute.
@@ -1312,7 +1319,8 @@ public:
   virtual NullablePtr<DeclContext> getDeclContext() const override {
     return decl;
   }
-  virtual NullablePtr<Decl> getDecl() const override { return decl; }
+  virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
+  Decl *getDecl() const { return decl; }
 
 protected:
   Decl *getEnclosingAbstractFunctionOrSubscriptDecl() const override;
@@ -1346,7 +1354,9 @@ protected:
   void printSpecifics(llvm::raw_ostream &out) const override;
 
 public:
-  virtual NullablePtr<Decl> getDecl() const override { return decl; }
+  virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
+  Decl *getDecl() const { return decl; }
+
   NullablePtr<AbstractStorageDecl>
   getEnclosingAbstractStorageDecl() const override {
     return decl;
@@ -1356,15 +1366,14 @@ public:
 
 class AbstractStmtScope : public ASTScopeImpl {
 public:
-  NullablePtr<const void> addressForPrinting() const override {
-    return getStmt().get();
-  }
   SourceRange getChildlessSourceRange() const override;
+  virtual Stmt *getStmt() const = 0;
+  NullablePtr<Stmt> getStmtIfAny() const override { return getStmt(); }
 };
 
 class LabeledConditionalStmtScope : public AbstractStmtScope {
 public:
-  NullablePtr<Stmt> getStmt() const override;
+  Stmt *getStmt() const override;
   virtual LabeledConditionalStmt *getLabeledConditionalStmt() const = 0;
 
   /// If a condition is present, create the martuska.
@@ -1457,7 +1466,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  NullablePtr<Stmt> getStmt() const override { return stmt; }
+  Stmt *getStmt() const override { return stmt; }
 };
 
 class DoCatchStmtScope final : public AbstractStmtScope {
@@ -1473,7 +1482,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  NullablePtr<Stmt> getStmt() const override { return stmt; }
+  Stmt *getStmt() const override { return stmt; }
 };
 
 class SwitchStmtScope final : public AbstractStmtScope {
@@ -1489,7 +1498,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  NullablePtr<Stmt> getStmt() const override { return stmt; }
+  Stmt *getStmt() const override { return stmt; }
 };
 
 class ForEachStmtScope final : public AbstractStmtScope {
@@ -1505,7 +1514,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  NullablePtr<Stmt> getStmt() const override { return stmt; }
+  Stmt *getStmt() const override { return stmt; }
 };
 
 class ForEachPatternScope final : public AbstractStmtScope {
@@ -1521,7 +1530,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  NullablePtr<Stmt> getStmt() const override { return stmt; }
+  Stmt *getStmt() const override { return stmt; }
   SourceRange getChildlessSourceRange() const override;
 
 protected:
@@ -1543,7 +1552,7 @@ private:
 public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
-  NullablePtr<Stmt> getStmt() const override { return stmt; }
+  Stmt *getStmt() const override { return stmt; }
 
 protected:
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
@@ -1564,7 +1573,7 @@ private:
 public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
-  NullablePtr<Stmt> getStmt() const override { return stmt; }
+  Stmt *getStmt() const override { return stmt; }
 
 protected:
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
@@ -1588,7 +1597,7 @@ public:
   virtual NullablePtr<DeclContext> getDeclContext() const override;
 
   NullablePtr<ClosureExpr> parentClosureIfAny() const; // public??
-  NullablePtr<Stmt> getStmt() const override { return stmt; }
+  Stmt *getStmt() const override { return stmt; }
 
 protected:
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,

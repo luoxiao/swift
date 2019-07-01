@@ -108,7 +108,7 @@ SourceManager &ASTScopeImpl::getSourceManager() const {
   return getASTContext().SourceMgr;
 }
 
-NullablePtr<Stmt> LabeledConditionalStmtScope::getStmt() const {
+Stmt *LabeledConditionalStmtScope::getStmt() const {
   return getLabeledConditionalStmt();
 }
 
@@ -141,7 +141,7 @@ LabeledConditionalStmt *GuardStmtScope::getLabeledConditionalStmt() const {
 #pragma mark getASTContext
 
 ASTContext &ASTScopeImpl::getASTContext() const {
-  if (auto d = getDecl())
+  if (auto d = getDeclIfAny())
     return d.get()->getASTContext();
   if (auto dc = getDeclContext())
     return dc.get()->getASTContext();

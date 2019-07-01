@@ -201,7 +201,7 @@ SourceRange WholeClosureScope::getChildlessSourceRange() const {
 }
 
 SourceRange AbstractStmtScope::getChildlessSourceRange() const {
-  return getStmt().get()->getSourceRange();
+  return getStmt()->getSourceRange();
 }
 
 SourceRange DefaultArgumentInitializerScope::getChildlessSourceRange() const {
@@ -269,7 +269,7 @@ SourceRange GenericTypeOrExtensionScope::getChildlessSourceRange() const {
 
 SourceRange GenericTypeOrExtensionWholePortion::getChildlessSourceRangeOf(
     const GenericTypeOrExtensionScope *scope) const {
-  auto *d = scope->getDecl().get();
+  auto *d = scope->getDecl();
   auto r = d->getSourceRangeIncludingAttrs();
   if (r.Start.isValid()) {
     assert(r.End.isValid());
@@ -285,7 +285,7 @@ SourceRange GenericTypeOrExtensionWherePortion::getChildlessSourceRangeOf(
 
 SourceRange IterableTypeBodyPortion::getChildlessSourceRangeOf(
     const GenericTypeOrExtensionScope *scope) const {
-  auto *d = scope->getDecl().get();
+  auto *d = scope->getDecl();
   if (auto *nt = dyn_cast<NominalTypeDecl>(d))
     return nt->getBraces();
   if (auto *e = dyn_cast<ExtensionDecl>(d))

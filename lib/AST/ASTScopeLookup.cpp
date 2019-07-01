@@ -545,7 +545,7 @@ NullablePtr<const ASTScopeImpl> ASTScopeImpl::ancestorWithDeclSatisfying(
     function_ref<bool(const Decl *)> predicate) const {
   for (NullablePtr<const ASTScopeImpl> s = getParent(); s;
        s = s.get()->getParent()) {
-    if (Decl *d = s.get()->getDecl().getPtrOrNull()) {
+    if (Decl *d = s.get()->getDeclIfAny().getPtrOrNull()) {
       if (predicate(d))
         return s;
     }
