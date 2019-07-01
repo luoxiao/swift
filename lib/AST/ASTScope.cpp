@@ -108,7 +108,7 @@ SourceManager &ASTScopeImpl::getSourceManager() const {
   return getASTContext().SourceMgr;
 }
 
-Stmt *LabeledConditionalStmtScope::getStmt() const {
+NullablePtr<Stmt> LabeledConditionalStmtScope::getStmt() const {
   return getLabeledConditionalStmt();
 }
 

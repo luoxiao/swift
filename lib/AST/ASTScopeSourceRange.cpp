@@ -201,7 +201,7 @@ SourceRange WholeClosureScope::getChildlessSourceRange() const {
 }
 
 SourceRange AbstractStmtScope::getChildlessSourceRange() const {
-  return getStmt()->getSourceRange();
+  return getStmt().get()->getSourceRange();
 }
 
 SourceRange DefaultArgumentInitializerScope::getChildlessSourceRange() const {

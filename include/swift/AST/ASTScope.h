@@ -175,6 +175,7 @@ protected:
 private:
   void emancipate() { parent = nullptr; }
   NullablePtr<ASTScopeImpl> getPriorSibling() const;
+  void removeFromDuplicates(ScopeCreator&) const;
 
 public:
   void postOrderDo(function_ref<void(ASTScopeImpl *)>);
@@ -244,6 +245,8 @@ public:
   virtual ASTContext &getASTContext() const;
   virtual NullablePtr<DeclContext> getDeclContext() const;
   virtual NullablePtr<Decl> getDecl() const { return nullptr; };
+  virtual NullablePtr<Stmt> getStmt() const { return nullptr; };
+  virtual NullablePtr<Expr> getExpr() const { return nullptr; };
 
 #pragma mark - debugging and printing
 
@@ -1149,7 +1152,8 @@ public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
   NullablePtr<const void> addressForPrinting() const override { return expr; }
-  virtual NullablePtr<DeclContext> getDeclContext() const override;
+  NullablePtr<DeclContext> getDeclContext() const override;
+  NullablePtr<Expr> getExpr() const override { return expr; }
 };
 
 // In order for compatibility with existing lookup, closures are represented
@@ -1189,6 +1193,7 @@ private:
 public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
+  NullablePtr<Expr> getExpr() const override { return closureExpr; }
 };
 
 /// For a closure with named parameters, this scope does the local bindings.
@@ -1350,16 +1355,15 @@ public:
 
 class AbstractStmtScope : public ASTScopeImpl {
 public:
-  virtual Stmt *getStmt() const = 0;
   NullablePtr<const void> addressForPrinting() const override {
-    return getStmt();
+    return getStmt().get();
   }
   SourceRange getChildlessSourceRange() const override;
 };
 
 class LabeledConditionalStmtScope : public AbstractStmtScope {
 public:
-  Stmt *getStmt() const override;
+  NullablePtr<Stmt> getStmt() const override;
   virtual LabeledConditionalStmt *getLabeledConditionalStmt() const = 0;
 
   /// If a condition is present, create the martuska.
@@ -1452,7 +1456,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  Stmt *getStmt() const override { return stmt; }
+  NullablePtr<Stmt> getStmt() const override { return stmt; }
 };
 
 class DoCatchStmtScope final : public AbstractStmtScope {
@@ -1468,7 +1472,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  Stmt *getStmt() const override { return stmt; }
+  NullablePtr<Stmt> getStmt() const override { return stmt; }
 };
 
 class SwitchStmtScope final : public AbstractStmtScope {
@@ -1484,7 +1488,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  Stmt *getStmt() const override { return stmt; }
+  NullablePtr<Stmt> getStmt() const override { return stmt; }
 };
 
 class ForEachStmtScope final : public AbstractStmtScope {
@@ -1500,7 +1504,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  Stmt *getStmt() const override { return stmt; }
+  NullablePtr<Stmt> getStmt() const override { return stmt; }
 };
 
 class ForEachPatternScope final : public AbstractStmtScope {
@@ -1516,7 +1520,7 @@ private:
 
 public:
   std::string getClassName() const override;
-  Stmt *getStmt() const override { return stmt; }
+  NullablePtr<Stmt> getStmt() const override { return stmt; }
   SourceRange getChildlessSourceRange() const override;
 
 protected:
@@ -1538,7 +1542,7 @@ private:
 public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
-  Stmt *getStmt() const override { return stmt; }
+  NullablePtr<Stmt> getStmt() const override { return stmt; }
 
 protected:
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
@@ -1559,7 +1563,7 @@ private:
 public:
   std::string getClassName() const override;
   SourceRange getChildlessSourceRange() const override;
-  Stmt *getStmt() const override { return stmt; }
+  NullablePtr<Stmt> getStmt() const override { return stmt; }
 
 protected:
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
@@ -1583,7 +1587,7 @@ public:
   virtual NullablePtr<DeclContext> getDeclContext() const override;
 
   NullablePtr<ClosureExpr> parentClosureIfAny() const; // public??
-  Stmt *getStmt() const override { return stmt; }
+  NullablePtr<Stmt> getStmt() const override { return stmt; }
 
 protected:
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,

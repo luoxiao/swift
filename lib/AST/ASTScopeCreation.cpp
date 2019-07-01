@@ -608,7 +608,7 @@ void ASTScopeImpl::disownDescendants(ScopeCreator &scopeCreator) {
   for (auto *c: getChildren()) {
     c->disownDescendants(scopeCreator);
     c->emancipate();
-    scopeCreator.removeFromDuplicates(c->getASTNode());
+    c->removeFromDuplicates(scopeCreator);
   }
   storedChildren.clear();
 }
@@ -1370,6 +1370,13 @@ std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
     std::stable_sort(sortedMembers.begin(), sortedMembers.end(), cmp);
   //HERE dump("AFTER");
   return sortedMembers;
+}
+
+
+void ASTScopeImpl::removeFromDuplicates(ScopeCreator &scopeCreator) const {
+  if (auto *p = getDecl().getPtrOrNull()) scopeCreator.removeFromDuplicates(p);
+  else if (auto *p = getStmt().getPtrOrNull()) scopeCreator.removeFromDuplicates(p);
+  else if (auto *p = getExpr().getPtrOrNull()) scopeCreator.removeFromDuplicates(p);
 }
 
 #pragma mark getScopeCreator
