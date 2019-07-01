@@ -154,7 +154,7 @@ bool ASTScopeImpl::verifyThatThisNodeComeAfterItsPriorSibling() const {
                       .getRangeForBuffer(
                           getSourceFile()->getBufferID().getValue())
                       .str();
-  abort();
+  assert(false && "unexpected out-of-order nodes");
 }
 
 NullablePtr<ASTScopeImpl> ASTScopeImpl::getPriorSibling() const {

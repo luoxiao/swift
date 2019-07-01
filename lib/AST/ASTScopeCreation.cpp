@@ -243,7 +243,7 @@ public:
     if (PatternEntryDeclScope::isHandledSpecially(n))
       return false;
 
-    if (!astDuplicates.insert(n.getOpaqueValue()).second)
+    if (isDuplicate(n))
       return false;
 
     return true;
@@ -253,6 +253,14 @@ public:
   void pushAllNecessaryNodes(ArrayRef<ASTNodelike> nodesToPrepend) {
     for (int i = nodesToPrepend.size() - 1; i >= 0; --i)
       pushIfNecessary(nodesToPrepend[i]);
+  }
+
+  bool isDuplicate(ASTNode n, bool registerDuplicate = true) {
+    if (auto *d = n.dyn_cast<Decl *>())
+      return isDuplicate(d, registerDuplicate);
+    if (auto *s = n.dyn_cast<Stmt *>())
+      return isDuplicate(s, registerDuplicate);
+    return isDuplicate(n.get<Expr *>(), registerDuplicate);
   }
 
   bool isDuplicate(void *p, bool registerDuplicate = true) {
@@ -491,8 +499,13 @@ public:
                                   ScopeCreator &scopeCreator) {
     for (auto &clause : icd->getClauses()) {
       visitExpr(clause.Cond, p, scopeCreator);
-      for (auto n : clause.Elements)
-        scopeCreator.createScopeFor(n, p);
+      if (&clause == icd->getActiveClause())
+        continue;
+      for (auto n : clause.Elements) {
+        // Or maybe skip active clause??
+        if (!scopeCreator.isDuplicate(n))
+          scopeCreator.createScopeFor(n, p);
+      }
     }
     return p;
   }
