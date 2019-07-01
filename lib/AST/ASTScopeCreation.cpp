@@ -353,7 +353,6 @@ public:
   VISIT_AND_IGNORE(AssociatedTypeDecl)
   VISIT_AND_IGNORE(ModuleDecl)
   VISIT_AND_IGNORE(ParamDecl)
-  VISIT_AND_IGNORE(EnumElementDecl)
   VISIT_AND_IGNORE(PoundDiagnosticDecl)
   VISIT_AND_IGNORE(MissingMemberDecl)
 
@@ -363,12 +362,11 @@ public:
   // This declaration is handled from addChildrenForAllExplicitAccessors
   VISIT_AND_IGNORE(AccessorDecl)
 
+  // These contain nothing to scope.
   VISIT_AND_IGNORE(BreakStmt)
   VISIT_AND_IGNORE(ContinueStmt)
   VISIT_AND_IGNORE(FallthroughStmt)
   VISIT_AND_IGNORE(FailStmt)
-  VISIT_AND_IGNORE(ThrowStmt)
-  VISIT_AND_IGNORE(PoundAssertStmt)
 
 #undef VISIT_AND_IGNORE
 
@@ -482,6 +480,13 @@ public:
     return isInTypeDecl ? parentScope : insertionPoint;
   }
 
+  ASTScopeImpl *visitEnumElementDecl(EnumElementDecl *eed, ASTScopeImpl *p,
+                                     ScopeCreator &scopeCreator) {
+    if (auto *expr = eed->getRawValueExpr()) // might contain a closure
+      visitExpr(expr, p, scopeCreator);
+    return p;
+  }
+
   ASTScopeImpl *visitIfConfigDecl(IfConfigDecl *icd, ASTScopeImpl *p,
                                   ScopeCreator &scopeCreator) {
     for (auto &clause : icd->getClauses()) {
@@ -496,6 +501,18 @@ public:
                                 ScopeCreator &scopeCreator) {
     if (rs->hasResult())
       visitExpr(rs->getResult(), p, scopeCreator);
+    return p;
+  }
+
+  ASTScopeImpl *visitThrowStmt(ThrowStmt *ts, ASTScopeImpl *p,
+                               ScopeCreator &scopeCreator) {
+    visitExpr(ts->getSubExpr(), p, scopeCreator);
+    return p;
+  }
+
+  ASTScopeImpl *visitPoundAssertStmt(PoundAssertStmt *pas, ASTScopeImpl *p,
+                                     ScopeCreator &scopeCreator) {
+    visitExpr(pas->getCondition(), p, scopeCreator);
     return p;
   }
 
