@@ -499,10 +499,8 @@ public:
                                   ScopeCreator &scopeCreator) {
     for (auto &clause : icd->getClauses()) {
       visitExpr(clause.Cond, p, scopeCreator);
-      if (&clause == icd->getActiveClause())
-        continue;
       for (auto n : clause.Elements) {
-        // Or maybe skip active clause??
+        // Or maybe skip active clause?? No, source order.
         if (!scopeCreator.isDuplicate(n))
           scopeCreator.createScopeFor(n, p);
       }
