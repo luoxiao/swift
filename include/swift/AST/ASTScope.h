@@ -161,21 +161,22 @@ protected:
   NullablePtr<const ASTScopeImpl> getParent() const { return parent; }
 
   const Children &getChildren() const { return storedChildren; }
-  
-  /// Does exactly the right thing when coping with an addition to members, so that old scopes
-  /// can be reused.
+
+  /// Does exactly the right thing when coping with an addition to members, so
+  /// that old scopes can be reused.
   const Children getAndDisownChildren();
 
-  /// Get ride of descendants and remove them from astDuplicates so the scopes can be recreated.
-  /// Needed because typechecking inserts a return statment into intiailizers.
-  void disownDescendants(ScopeCreator&);
-  
+  /// Get ride of descendants and remove them from astDuplicates so the scopes
+  /// can be recreated. Needed because typechecking inserts a return statment
+  /// into intiailizers.
+  void disownDescendants(ScopeCreator &);
+
   void addChild(ASTScopeImpl *child, ASTContext &);
 
 private:
   void emancipate() { parent = nullptr; }
   NullablePtr<ASTScopeImpl> getPriorSibling() const;
-  void removeFromDuplicates(ScopeCreator&) const;
+  void removeFromDuplicates(ScopeCreator &) const;
 
 public:
   void postOrderDo(function_ref<void(ASTScopeImpl *)>);

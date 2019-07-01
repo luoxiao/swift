@@ -268,17 +268,17 @@ public:
       return !astDuplicates.insert(p).second;
     return astDuplicates.count(p);
   }
-  
-  void removeFromDuplicates(void* p) {
-    astDuplicates.erase(p);
-  }
-  
+
+  void removeFromDuplicates(void *p) { astDuplicates.erase(p); }
+
   void removeFromDuplicates(ASTNode n) {
     if (!n)
       return;
-    if (auto *d = n.dyn_cast<Decl*>()) removeFromDuplicates(d);
-    if (auto *s = n.dyn_cast<Stmt*>()) removeFromDuplicates(s);
-    removeFromDuplicates(n.get<Expr*>());
+    if (auto *d = n.dyn_cast<Decl *>())
+      removeFromDuplicates(d);
+    if (auto *s = n.dyn_cast<Stmt *>())
+      removeFromDuplicates(s);
+    removeFromDuplicates(n.get<Expr *>());
   }
 
 public:
@@ -605,7 +605,7 @@ const ASTScopeImpl::Children ASTScopeImpl::getAndDisownChildren() {
 }
 
 void ASTScopeImpl::disownDescendants(ScopeCreator &scopeCreator) {
-  for (auto *c: getChildren()) {
+  for (auto *c : getChildren()) {
     c->disownDescendants(scopeCreator);
     c->emancipate();
     c->removeFromDuplicates(scopeCreator);
@@ -1372,11 +1372,13 @@ std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
   return sortedMembers;
 }
 
-
 void ASTScopeImpl::removeFromDuplicates(ScopeCreator &scopeCreator) const {
-  if (auto *p = getDecl().getPtrOrNull()) scopeCreator.removeFromDuplicates(p);
-  else if (auto *p = getStmt().getPtrOrNull()) scopeCreator.removeFromDuplicates(p);
-  else if (auto *p = getExpr().getPtrOrNull()) scopeCreator.removeFromDuplicates(p);
+  if (auto *p = getDecl().getPtrOrNull())
+    scopeCreator.removeFromDuplicates(p);
+  else if (auto *p = getStmt().getPtrOrNull())
+    scopeCreator.removeFromDuplicates(p);
+  else if (auto *p = getExpr().getPtrOrNull())
+    scopeCreator.removeFromDuplicates(p);
 }
 
 #pragma mark getScopeCreator
