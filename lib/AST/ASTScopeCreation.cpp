@@ -354,7 +354,6 @@ public:
   VISIT_AND_IGNORE(ModuleDecl)
   VISIT_AND_IGNORE(ParamDecl)
   VISIT_AND_IGNORE(EnumElementDecl)
-  VISIT_AND_IGNORE(IfConfigDecl)
   VISIT_AND_IGNORE(PoundDiagnosticDecl)
   VISIT_AND_IGNORE(MissingMemberDecl)
 
@@ -481,6 +480,16 @@ public:
     // If in a type decl, the type search will find these,
     // but if in a brace stmt, must continue under the last binding.
     return isInTypeDecl ? parentScope : insertionPoint;
+  }
+
+  ASTScopeImpl *visitIfConfigDecl(IfConfigDecl *icd, ASTScopeImpl *p,
+                                  ScopeCreator &scopeCreator) {
+    for (auto &clause : icd->getClauses()) {
+      visitExpr(clause.Cond, p, scopeCreator);
+      for (auto n : clause.Elements)
+        scopeCreator.createScopeFor(n, p);
+    }
+    return p;
   }
 
   ASTScopeImpl *visitReturnStmt(ReturnStmt *rs, ASTScopeImpl *p,
