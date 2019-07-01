@@ -268,6 +268,18 @@ public:
       return !astDuplicates.insert(p).second;
     return astDuplicates.count(p);
   }
+  
+  void removeFromDuplicates(void* p) {
+    astDuplicates.erase(p);
+  }
+  
+  void removeFromDuplicates(ASTNode n) {
+    if (!n)
+      return;
+    if (auto *d = n.dyn_cast<Decl*>()) removeFromDuplicates(d);
+    if (auto *s = n.dyn_cast<Stmt*>()) removeFromDuplicates(s);
+    removeFromDuplicates(n.get<Expr*>());
+  }
 
 public:
   void dump() const { print(llvm::errs()); }
@@ -580,6 +592,25 @@ void ASTScopeImpl::addChild(ASTScopeImpl *child, ASTContext &ctx) {
   storedChildren.push_back(child);
   assert(!child->getParent() && "child should not already have parent");
   child->parent = this;
+}
+
+const ASTScopeImpl::Children ASTScopeImpl::getAndDisownChildren() {
+  // Because type-checking can add a return to a brace stmt constructor body,
+  // must do the right thing for rebuilding fn bodies so disown must undup
+  Children r = getChildren();
+  storedChildren.clear();
+  for (auto *c : r)
+    c->emancipate(); // so it can be added back without tripping assertion
+  return r;
+}
+
+void ASTScopeImpl::disownDescendants(ScopeCreator &scopeCreator) {
+  for (auto *c: getChildren()) {
+    c->disownDescendants(scopeCreator);
+    c->emancipate();
+    scopeCreator.removeFromDuplicates(c->getASTNode());
+  }
+  storedChildren.clear();
 }
 
 bool PatternEntryDeclScope::isHandledSpecially(const ASTNode n) {
@@ -1156,7 +1187,7 @@ void AbstractFunctionBodyScope::expandBody(
   // erroneous code in bodies.
   BraceStmt *braceStmt = decl->getBody();
   if (bodyWhenLastExpanded != braceStmt) {
-    getAndDisownChildren();
+    disownDescendants(scopeCreator);
     if (braceStmt)
       ASTVisitorForScopeCreation().visitBraceStmt(braceStmt, this,
                                                   scopeCreator);
