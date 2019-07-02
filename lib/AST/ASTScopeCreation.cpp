@@ -81,9 +81,9 @@ public:
     const void *p = ptr(x).getPtrOrNull();
     return pointers.count(p);
   }
-  template <typename T> void insert(T x) {
+  template <typename T> bool insert(T x) {
     const void *p = ptr(x).getPtrOrNull();
-    pointers.insert(p);
+    return pointers.insert(p).second;
   }
   template <typename T> void erase(T x) {
     const void *p = ptr(x).getPtrOrNull();
@@ -133,14 +133,14 @@ public:
     auto *ip = insertionPoint;
     for (auto nd : nodesOrDeclsToAdd) {
       if (shouldThisNodeBeScopedWhenEncountered(nd))
-        ip = createScopeFor(nd, ip);
+        ip = createScopeFor(nd, ip).getPtrOr(ip);
     }
     return ip;
   }
 
 public:
-  /// Return new insertion point
-  ASTScopeImpl *createScopeFor(ASTNode, ASTScopeImpl *parent);
+  /// Return new insertion point if the scope was not a duplicate
+  NullablePtr<ASTScopeImpl> createScopeFor(ASTNode, ASTScopeImpl *parent);
 
   bool shouldCreateScope(ASTNode n) const {
     // Cannot ignore implicit statements because implict return can contain
@@ -193,7 +193,7 @@ public:
   /// receive more decls.
    template <typename Scope, typename... Args>
   ASTScopeImpl *createSubtree(ASTScopeImpl *parent, Args... args) {
-    return createSubtreeImpl<Scope>(parent, args);
+    return createSubtreeImpl<Scope>(parent, args...);
   }
   
   template <typename Scope, typename... Args>
@@ -201,7 +201,7 @@ public:
     Scope dryRun(args...);
   #error static typing on the scope
     if (scopedNodes.insert(&dryRun))
-      return createSubtreeImpl<Scope>(parent, args);
+      return createSubtreeImpl<Scope>(parent, args...);
   }
   
   private:
@@ -535,7 +535,7 @@ public:
     return isInTypeDecl ? parentScope : insertionPoint;
   }
 
-  ANullablePtr<ASTScopeImpl> visitEnumElementDecl(EnumElementDecl *eed, ASTScopeImpl *p,
+  NullablePtr<ASTScopeImpl> visitEnumElementDecl(EnumElementDecl *eed, ASTScopeImpl *p,
                                      ScopeCreator &scopeCreator) {
     if (auto *expr = eed->getRawValueExpr()) // might contain a closure
       visitExpr(expr, p, scopeCreator);
@@ -1239,7 +1239,7 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
     };
     auto addNewScope = [&] {
       auto *nextNew = *nextNewMember++;
-      scopeCreator.createScopeForIfUnique(nextNew, this);
+      scopeCreator.createScopeFor(nextNew, this);
     };
 
     if (nextOldScope == oldChildren.end()) {
