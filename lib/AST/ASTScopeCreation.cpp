@@ -253,11 +253,11 @@ public:
   bool isDuplicate(ASTNode n, bool registerDuplicate = true) {
     PtrCalc pc;
     if (auto *p = n.dyn_cast<Decl *>())
-      return pc.visit(p);
+      return isDuplicateImpl(pc.visit(p));
     if (auto *p = n.dyn_cast<Stmt *>())
-      return pc.visit(p);
+      return isDuplicateImpl(pc.visit(p));
     if (auto *p = n.dyn_cast<Expr *>())
-      return pc.visit(p);
+      return isDuplicateImpl(pc.visit(p));
     llvm_unreachable("impossible");
   }
   template <typename T> bool isDuplicate(T *p, bool registerDuplicate = true) {
@@ -273,9 +273,10 @@ private:
   /// scope class must implement removeFromDuplicates
   bool isDuplicateImpl(void *p, bool registerDuplicate = true) {
     assert(p);
-    if (registerDuplicate)
-      return !astDuplicates.insert(p).second;
-    return astDuplicates.count(p);
+    bool r = registerDuplicate ? !astDuplicates.insert(p).second
+                               : bool(astDuplicates.count(p));
+    llvm::errs() << "HERE " << p << " reg: " << registerDuplicate
+                 << " is: " << r << "\n";
   }
 
 private:
