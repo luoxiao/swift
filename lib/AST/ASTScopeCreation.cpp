@@ -37,6 +37,61 @@ using namespace ast_scope;
 namespace swift {
 namespace ast_scope {
 
+namespace {
+/// Use me with any ASTNode, Expr*, Decl*, or Stmt*
+/// I will yield a void* that is the same, even when given an Expr* and a
+/// ClosureExor* because I take the Expr*, figure its real class, then up
+/// cast.
+class PtrCalc : public ASTVisitor<PtrCalc, void *, void *, void *, void *,
+                                  void *, void *> {
+public:
+  // Call these only from the superclass
+  void *visitDecl(Decl *e) { return e; }
+  void *visitStmt(Stmt *e) { return e; }
+  void *visitExpr(Expr *e) { return e; }
+  void *visitDeclAttribute(DeclAttribute *e) { return e; }
+
+// Provide default implementations for statements as ASTVisitor does for Exprs
+#define STMT(CLASS, PARENT)                                                    \
+  void *visit##CLASS##Stmt(CLASS##Stmt *S) { return visitStmt(S); }
+#include "swift/AST/StmtNodes.def"
+};
+
+/// A set that does the right pointer calculation
+class NodeSet {
+  llvm::DenseSet<const void *> pointers;
+  NullablePtr<const void> ptr(const ASTNode n) {
+    // clang-format off
+      if (auto *p = n.dyn_cast<Decl *>())  return ptr(p);
+      if (auto *p = n.dyn_cast<Stmt *>())  return ptr(p);
+      if (auto *p = n.dyn_cast<Expr *>())  return ptr(p);
+    // clang-format on
+    llvm_unreachable("impossible");
+  }
+  template <typename T> NullablePtr<const void> ptr(const T *p) {
+    return PtrCalc().visit(const_cast<T *>(p));
+  }
+  template <>
+  NullablePtr<const void> ptr<ASTScopeImpl>(const ASTScopeImpl *const scope) {
+    return scope->referrent();
+  }
+
+public:
+  template <typename T> bool contains(T x) {
+    const void *p = ptr(x).getPtrOrNull();
+    return pointers.count(p);
+  }
+  template <typename T> void insert(T x) {
+    const void *p = ptr(x).getPtrOrNull();
+    pointers.insert(p);
+  }
+  template <typename T> void erase(T x) {
+    const void *p = ptr(x).getPtrOrNull();
+    pointers.erase(p);
+  }
+};
+} // namespace
+
 #pragma mark ScopeCreator
 
 class ScopeCreator final {
@@ -49,17 +104,19 @@ public:
   ASTContext &getASTContext() const { return ctx; }
 
 private:
-  /// Catch duplicate nodes in the AST
+  /// The AST can have duplicate nodes, and we don't want to create scopes for
+  /// those.
   /// TODO: better to use a shared pointer? Unique pointer?
-  Optional<llvm::DenseSet<void*>> _astDuplicates;
-  llvm::DenseSet<void*> &astDuplicates;
+  Optional<NodeSet> _scopedNodes;
+
+public:
+  NodeSet &scopedNodes;
 
 public:
   ScopeCreator(SourceFile *SF)
       : ctx(SF->getASTContext()),
         sourceFileScope(new (ctx) ASTSourceFileScope(SF, this)),
-        _astDuplicates(llvm::DenseSet<void *>()),
-        astDuplicates(_astDuplicates.getValue()) {}
+        _scopedNodes(NodeSet()), scopedNodes(_scopedNodes.getValue()) {}
 
 public:
   ScopeCreator(const ScopeCreator &) = delete;  // ensure no copies
@@ -137,6 +194,7 @@ public:
   /// receive more decls.
   ASTScopeImpl *createSubtree(ASTScopeImpl *parent, Args... args) {
     auto *child = new (ctx) Scope(args...);
+    scopedNodes.insert(up_cast<ASTScopeImpl>(child));
     parent->addChild(child, ctx);
     return child->expandMe(*this);
   }
@@ -164,7 +222,7 @@ private:
           foundUniqueClosure) {
     forEachClosureIn(expr, [&](NullablePtr<CaptureListExpr> captureList,
                                ClosureExpr *closureExpr) {
-      if (!isDuplicate(closureExpr))
+      if (!scopedNodes.contains(closureExpr))
         foundUniqueClosure(captureList, closureExpr);
     });
   }
@@ -206,7 +264,7 @@ public:
       return parent;
     auto *s = parent;
     for (unsigned i : indices(generics->getParams()))
-      if (!isDuplicate(generics->getParams()[i])) {
+      if (!scopedNodes.contains(generics->getParams()[i])) {
         s = createSubtree<GenericParamScope>(s, parameterizedDecl, generics, i);
       }
     return s;
@@ -221,7 +279,7 @@ public:
     SmallVector<SpecializeAttr *, 8> sortedSpecializeAttrs;
     for (auto *attr : declBeingSpecialized->getAttrs()) {
       if (auto *specializeAttr = dyn_cast<SpecializeAttr>(attr)) {
-        if (!isDuplicate(specializeAttr))
+        if (!scopedNodes.contains(specializeAttr))
           sortedSpecializeAttrs.push_back(specializeAttr);
       }
     }
@@ -240,7 +298,8 @@ public:
     // they get created directly by the pattern code.
     // Doing otherwise distorts the source range
     // of their parents.
-    return !PatternEntryDeclScope::isHandledSpecially(n) && !isDuplicate(n);
+    return !PatternEntryDeclScope::isHandledSpecially(n) &&
+           !scopedNodes.contains(n);
   }
 
   template <typename ASTNodelike>
@@ -248,62 +307,6 @@ public:
     for (int i = nodesToPrepend.size() - 1; i >= 0; --i)
       pushIfNecessary(nodesToPrepend[i]);
   }
-
-public:
-  bool isDuplicate(ASTNode n, bool registerDuplicate = true) {
-    PtrCalc pc;
-    if (auto *p = n.dyn_cast<Decl *>())
-      return isDuplicateImpl(pc.visit(p));
-    if (auto *p = n.dyn_cast<Stmt *>())
-      return isDuplicateImpl(pc.visit(p));
-    if (auto *p = n.dyn_cast<Expr *>())
-      return isDuplicateImpl(pc.visit(p));
-    llvm_unreachable("impossible");
-  }
-  template <typename T> bool isDuplicate(T *p, bool registerDuplicate = true) {
-    return isDuplicateImpl(PtrCalc().visit(p), registerDuplicate);
-  }
-
-  template <typename T> void removeFromDuplicates(T x) {
-    removeFromDuplicatesImpl(PtrCalc().visit(x));
-  }
-
-private:
-  /// If isDuplicate is called to prevent creating a scope, the corresponding
-  /// scope class must implement removeFromDuplicates
-  bool isDuplicateImpl(void *p, bool registerDuplicate = true) {
-    assert(p);
-    bool r = registerDuplicate ? !astDuplicates.insert(p).second
-                               : bool(astDuplicates.count(p));
-    // llvm::errs() << "isDuplicate " << p << " reg: " << registerDuplicate
-    //              << " is: " << r << "\n";
-    return r;
-  }
-
-private:
-  void removeFromDuplicatesImpl(void *p) {
-    assert(p);
-    astDuplicates.erase(p);
-  }
-
-  /// Use me with any ASTNode, Expr*, Decl*, or Stmt*
-  /// I will yield a void* that is the same, even when given an Expr* and a
-  /// ClosureExor* because I take the Expr*, figure its real class, then up
-  /// cast.
-  class PtrCalc : public ASTVisitor<PtrCalc, void *, void *, void *, void *,
-                                    void *, void *> {
-  public:
-    // Call these only from the superclass
-    void *visitDecl(Decl *e) { return e; }
-    void *visitStmt(Stmt *e) { return e; }
-    void *visitExpr(Expr *e) { return e; }
-    void *visitDeclAttribute(DeclAttribute *e) { return e; }
-
-// Provide default implementations for statements as ASTVisitor does for Exprs
-#define STMT(CLASS, PARENT)                                                    \
-  void *visit##CLASS##Stmt(CLASS##Stmt *S) { return visitStmt(S); }
-#include "swift/AST/StmtNodes.def"
-  };
 
 public:
   void dump() const { print(llvm::errs()); }
@@ -537,7 +540,7 @@ public:
       visitExpr(clause.Cond, p, scopeCreator);
       for (auto n : clause.Elements) {
         // Or maybe skip active clause?? No, source order.
-        if (!scopeCreator.isDuplicate(n))
+        if (!scopeCreator.scopedNodes.contains(n))
           scopeCreator.createScopeFor(n, p);
       }
     }
@@ -595,7 +598,7 @@ void ScopeCreator::addChildrenForAllExplicitAccessors(AbstractStorageDecl *asd,
       // Accessors are always nested within their abstract storage
       // declaration. The nesting may not be immediate, because subscripts may
       // have intervening scopes for generics.
-      if (!isDuplicate(accessor) &&
+      if (!scopedNodes.contains(accessor) &&
           parent->getEnclosingAbstractStorageDecl() == accessor->getStorage())
         ASTVisitorForScopeCreation().visitAbstractFunctionDecl(accessor, parent,
                                                                *this);
@@ -632,7 +635,7 @@ void ASTScopeImpl::disownDescendants(ScopeCreator &scopeCreator) {
   for (auto *c : getChildren()) {
     c->disownDescendants(scopeCreator);
     c->emancipate();
-    c->removeFromDuplicates(scopeCreator);
+    scopeCreator.scopedNodes.erase(c);
   }
   storedChildren.clear();
 }
@@ -710,7 +713,7 @@ AbstractFunctionParamsScope::expandAScopeThatCreatesANewInsertionPoint(
   // Unlike generic parameters or pattern initializers, it cannot refer to a
   // previous parameter.
   for (ParamDecl *pd : params->getArray()) {
-    if (!scopeCreator.isDuplicate(pd) && pd->getDefaultValue())
+    if (!scopeCreator.scopedNodes.contains(pd) && pd->getDefaultValue())
       scopeCreator.createSubtree<DefaultArgumentInitializerScope>(this, pd);
   }
   return this; // body of func goes under me
@@ -752,7 +755,7 @@ PatternEntryInitializerScope::expandAScopeThatCreatesANewInsertionPoint(
 ASTScopeImpl *PatternEntryUseScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
   // Add accessors for the variables in this pattern.
-  forEachVarDeclWithExplicitAccessors(scopeCreator, false, [&](VarDecl *var) {
+  forEachVarDeclWithExplicitAccessors(scopeCreator, [&](VarDecl *var) {
     scopeCreator.createSubtree<VarDeclScope>(this, var);
   });
   return this;
@@ -880,7 +883,7 @@ void DoCatchStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   scopeCreator.createScopeFor(stmt->getBody(), this);
 
   for (auto catchClause : stmt->getCatches()) {
-    if (!scopeCreator.isDuplicate(catchClause)) {
+    if (!scopeCreator.scopedNodes.contains(catchClause)) {
       ASTVisitorForScopeCreation().visitCatchStmt(catchClause, this,
                                                   scopeCreator);
     }
@@ -893,7 +896,8 @@ void SwitchStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
                                          scopeCreator);
 
   for (auto caseStmt : stmt->getCases()) {
-    if (!scopeCreator.isDuplicate(caseStmt) && !caseStmt->isImplicit()) {
+    if (!scopeCreator.scopedNodes.contains(caseStmt) &&
+        !caseStmt->isImplicit()) {
       scopeCreator.createSubtree<CaseStmtScope>(this, caseStmt);
     }
   }
@@ -1092,11 +1096,9 @@ AbstractPatternEntryScope::AbstractPatternEntryScope(
 }
 
 void AbstractPatternEntryScope::forEachVarDeclWithExplicitAccessors(
-    ScopeCreator &scopeCreator, bool dontRegisterAsDuplicate,
-    function_ref<void(VarDecl *)> foundOne) const {
+    ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const {
   getPatternEntry().getPattern()->forEachVariable([&](VarDecl *var) {
-    // Since I'll be called twice, don't register the first time.
-    if (scopeCreator.isDuplicate(var, !dontRegisterAsDuplicate))
+    if (scopeCreator.scopedNodes.contains(var))
       return;
     const bool hasAccessors = var->getBracesRange().isValid();
     if (hasAccessors && !var->isImplicit())
@@ -1237,7 +1239,7 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
     };
     auto addNewScope = [&] {
       auto *nextNew = *nextNewMember++;
-      if (!scopeCreator.isDuplicate(nextNew))
+      if (!scopeCreator.scopedNodes.contains(nextNew))
         scopeCreator.createScopeFor(nextNew, this);
     };
 
@@ -1363,15 +1365,16 @@ std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
   return sortedMembers;
 }
 
-void ASTScopeImpl::removeFromDuplicates(ScopeCreator &scopeCreator) const {
+NullablePtr<const void> ASTScopeImpl::referrent() const {
   if (auto *p = getDeclIfAny().getPtrOrNull())
-    scopeCreator.removeFromDuplicates(p);
-  else if (auto *p = getStmtIfAny().getPtrOrNull())
-    scopeCreator.removeFromDuplicates(p);
-  else if (auto *p = getExprIfAny().getPtrOrNull())
-    scopeCreator.removeFromDuplicates(p);
-  else if (auto *a = getDeclAttributeIfAny().getPtrOrNull())
-    scopeCreator.removeFromDuplicates(a);
+    return PtrCalc().visit(p);
+  if (auto *p = getStmtIfAny().getPtrOrNull())
+    return PtrCalc().visit(p);
+  if (auto *p = getExprIfAny().getPtrOrNull())
+    return PtrCalc().visit(p);
+  if (auto *p = getDeclAttributeIfAny().getPtrOrNull())
+    return PtrCalc().visit(p);
+  return nullptr;
 }
 
 #pragma mark getScopeCreator

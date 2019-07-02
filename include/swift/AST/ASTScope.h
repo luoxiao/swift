@@ -166,7 +166,7 @@ protected:
   /// that old scopes can be reused.
   const Children getAndDisownChildren();
 
-  /// Get ride of descendants and remove them from astDuplicates so the scopes
+  /// Get ride of descendants and remove them from scopedNodes so the scopes
   /// can be recreated. Needed because typechecking inserts a return statment
   /// into intiailizers.
   void disownDescendants(ScopeCreator &);
@@ -176,9 +176,9 @@ protected:
 private:
   void emancipate() { parent = nullptr; }
   NullablePtr<ASTScopeImpl> getPriorSibling() const;
-  void removeFromDuplicates(ScopeCreator &) const;
 
 public:
+  NullablePtr<const void> referrent() const;
   void postOrderDo(function_ref<void(ASTScopeImpl *)>);
 
 #pragma mark - source ranges
@@ -1001,8 +1001,7 @@ public:
 protected:
   void printSpecifics(llvm::raw_ostream &out) const override;
   void forEachVarDeclWithExplicitAccessors(
-      ScopeCreator &scopeCreator, bool dontRegisterAsDuplicate,
-      function_ref<void(VarDecl *)> foundOne) const;
+      ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const;
 
 public:
   bool isLastEntry() const;
