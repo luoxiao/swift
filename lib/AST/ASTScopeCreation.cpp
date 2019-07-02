@@ -275,8 +275,9 @@ private:
     assert(p);
     bool r = registerDuplicate ? !astDuplicates.insert(p).second
                                : bool(astDuplicates.count(p));
-    //    llvm::errs() << "isDuplicate " << p << " reg: " << registerDuplicate
-    //                 << " is: " << r << "\n";
+    // llvm::errs() << "isDuplicate " << p << " reg: " << registerDuplicate
+    //              << " is: " << r << "\n";
+    return r;
   }
 
 private:
@@ -1355,32 +1356,10 @@ std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
     return comesBefore;
   };
 
-  auto dump = [&](const char *m) {
-    llvm::errs() << "\n\n" << m << "\n";
-    PrintOptions options;
-    options.FunctionDefinitions = false;
-    options.TypeDefinitions = false;
-    options.VarInitializers = false;
-    // FIXME: Move all places where SIL printing is happening to explicit
-    // options. For example, see \c ProjectionPath::print.
-    options.PreferTypeRepr = false;
-    for (auto *d : sortedMembers) {
-      llvm::errs() << d << "  ";
-      auto bufferID = SM.findBufferContainingLoc(d->getStartLoc());
-      d->getSourceRange().print(llvm::errs(), SM, bufferID, false);
-      llvm::errs() << "  ";
-      d->print(llvm::errs(), options);
-      llvm::errs() << "\n";
-    }
-    llvm::errs() << "\n";
-  };
-
-  // dump("BEFORE");
-
   // Common case is building first time and is sorted
   if (!std::is_sorted(sortedMembers.begin(), sortedMembers.end(), cmp))
     std::stable_sort(sortedMembers.begin(), sortedMembers.end(), cmp);
-  // dump("AFTER");
+
   return sortedMembers;
 }
 
