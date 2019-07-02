@@ -187,46 +187,59 @@ public:
     return true;
   }
 
-  template <typename Scope, typename... Args>
-  /// Create a new scope of class ChildScope initialized with a ChildElement,
+ /// Create a new scope of class ChildScope initialized with a ChildElement,
   /// expandScope it,
   /// add it as a child of the receiver, and return the child and the scope to
   /// receive more decls.
+   template <typename Scope, typename... Args>
   ASTScopeImpl *createSubtree(ASTScopeImpl *parent, Args... args) {
-    auto *child = new (ctx) Scope(args...);
-    scopedNodes.insert(up_cast<ASTScopeImpl>(child));
+    return createSubtreeImpl<Scope>(parent, args);
+  }
+  
+  template <typename Scope, typename... Args>
+  NullablePtr<ASTScopeImpl> createSubtreeIfUnique(ASTScopeImpl *parent, Args... args) {
+    Scope dryRun(args...);
+  #error static typing on the scope
+    if (scopedNodes.insert(&dryRun))
+      return createSubtreeImpl<Scope>(parent, args);
+  }
+  
+  private:
+  template <typename Scope, typename... Args>
+  ASTScopeImpl *createSubtreeImpl(ASTScopeImpl *parent, Args... args) {
+   #error static typing on the scope
+   auto *child = new (ctx) Scope(args...);
     parent->addChild(child, ctx);
     return child->expandMe(*this);
   }
+  
+  public:
+
 
   template <typename Scope, typename PortionClass, typename... Args>
   ASTScopeImpl *createSubtree2D(ASTScopeImpl *parent, Args... args) {
     const Portion *portion = new (ctx) PortionClass();
     return createSubtree<Scope>(parent, portion, args...);
   }
+  
+  template <typename Scope, typename PortionClass, typename... Args>
+  NullablePtr<ASTScopeImpl> createSubtree2DIfUnique(ASTScopeImpl *parent, Args... args) {
+    const Portion *portion = new (ctx) PortionClass();
+    return createSubtreeIfUnique<Scope>(parent, portion, args...);
+  }
+
 
   void addChildrenForCapturesAndClosuresIn(Expr *expr, ASTScopeImpl *parent) {
     // Use the ASTWalker to find buried captures and closures
-    forEachUniqueClosureIn(expr, [&](NullablePtr<CaptureListExpr> captureList,
+    forEachClosureIn(expr, [&](NullablePtr<CaptureListExpr> captureList,
                                      ClosureExpr *closureExpr) {
-      createSubtree<WholeClosureScope>(parent, closureExpr, captureList);
+      createSubtreeIfUnique<WholeClosureScope>(parent, closureExpr, captureList);
     });
   }
 
 private:
   /// Find all of the (non-nested) closures (and associated capture lists)
   /// referenced within this expression.
-  void forEachUniqueClosureIn(
-      Expr *expr,
-      function_ref<void(NullablePtr<CaptureListExpr>, ClosureExpr *)>
-          foundUniqueClosure) {
-    forEachClosureIn(expr, [&](NullablePtr<CaptureListExpr> captureList,
-                               ClosureExpr *closureExpr) {
-      if (!scopedNodes.contains(closureExpr))
-        foundUniqueClosure(captureList, closureExpr);
-    });
-  }
-
   void forEachClosureIn(
       Expr *expr,
       function_ref<void(NullablePtr<CaptureListExpr>, ClosureExpr *)>
@@ -264,9 +277,7 @@ public:
       return parent;
     auto *s = parent;
     for (unsigned i : indices(generics->getParams()))
-      if (!scopedNodes.contains(generics->getParams()[i])) {
-        s = createSubtree<GenericParamScope>(s, parameterizedDecl, generics, i);
-      }
+        s = createSubtreeIfUnique<GenericParamScope>(s, parameterizedDecl, generics, i).getPtrOr(s);
     return s;
   }
 
@@ -278,10 +289,8 @@ public:
                                      function_ref<void(SpecializeAttr *)> fn) {
     SmallVector<SpecializeAttr *, 8> sortedSpecializeAttrs;
     for (auto *attr : declBeingSpecialized->getAttrs()) {
-      if (auto *specializeAttr = dyn_cast<SpecializeAttr>(attr)) {
-        if (!scopedNodes.contains(specializeAttr))
-          sortedSpecializeAttrs.push_back(specializeAttr);
-      }
+      if (auto *specializeAttr = dyn_cast<SpecializeAttr>(attr))
+        sortedSpecializeAttrs.push_back(specializeAttr);
     }
     const auto &srcMgr = declBeingSpecialized->getASTContext().SourceMgr;
     std::sort(sortedSpecializeAttrs.begin(), sortedSpecializeAttrs.end(),
@@ -298,8 +307,7 @@ public:
     // they get created directly by the pattern code.
     // Doing otherwise distorts the source range
     // of their parents.
-    return !PatternEntryDeclScope::isHandledSpecially(n) &&
-           !scopedNodes.contains(n);
+    return !PatternEntryDeclScope::isHandledSpecially(n);
   }
 
   template <typename ASTNodelike>
@@ -373,9 +381,9 @@ namespace swift {
 namespace ast_scope {
 
 class ASTVisitorForScopeCreation
-    : public ASTVisitor<ASTVisitorForScopeCreation, ASTScopeImpl *,
-                        ASTScopeImpl *, ASTScopeImpl *, void, void, void,
-                        ASTScopeImpl *, ScopeCreator &> {
+    : public ASTVisitor<ASTVisitorForScopeCreation, NullablePtr<ASTScopeImpl>,
+                        NullablePtr<ASTScopeImpl>, NullablePtr<ASTScopeImpl>, void, void, void,
+                        NullablePtr<ASTScopeImpl>, ScopeCreator &> {
 public:
 
 #pragma mark ASTNodes that do not create scopes
@@ -385,7 +393,7 @@ public:
   // accesses such a definition must resolve as being IN the scope.
 
 #define VISIT_AND_IGNORE(What)                                                 \
-  ASTScopeImpl *visit##What(What *w, ASTScopeImpl *p, ScopeCreator &) {        \
+  NullablePtr<ASTScopeImpl> visit##What(What *w, ASTScopeImpl *p, ScopeCreator &) {        \
     p->widenSourceRangeForIgnoredASTNode(w);                                   \
     return p;                                                                  \
   }
@@ -420,9 +428,9 @@ public:
 #pragma mark simple creation ignoring deferred nodes
 
 #define VISIT_AND_CREATE(What, ScopeClass)                                     \
-  ASTScopeImpl *visit##What(What *w, ASTScopeImpl *p,                          \
+  NullablePtr<ASTScopeImpl> visit##What(What *w, ASTScopeImpl *p,                          \
                             ScopeCreator &scopeCreator) {                      \
-    return scopeCreator.createSubtree<ScopeClass>(p, w);                       \
+    return scopeCreator.createSubtreeIfUnique<ScopeClass>(p, w);                       \
   }
 
   VISIT_AND_CREATE(SubscriptDecl, SubscriptDeclScope)
@@ -441,10 +449,10 @@ public:
 #pragma mark 2D simple creation (ignoring deferred nodes)
 
 #define VISIT_AND_CREATE_WHOLE_PORTION(What, WhatScope)                        \
-  ASTScopeImpl *visit##What(What *w, ASTScopeImpl *p,                          \
+  NullablePtr<ASTScopeImpl> visit##What(What *w, ASTScopeImpl *p,                          \
                             ScopeCreator &scopeCreator) {                      \
     return scopeCreator                                                        \
-        .createSubtree2D<WhatScope, GenericTypeOrExtensionWholePortion>(p, w); \
+        .createSubtree2DIfUnique<WhatScope, GenericTypeOrExtensionWholePortion>(p, w); \
   }
 
   VISIT_AND_CREATE_WHOLE_PORTION(ExtensionDecl, ExtensionScope)
@@ -455,11 +463,11 @@ public:
   VISIT_AND_CREATE_WHOLE_PORTION(OpaqueTypeDecl, OpaqueTypeScope)
 #undef VISIT_AND_CREATE_WHOLE_PORTION
 
-  ASTScopeImpl *visitProtocolDecl(ProtocolDecl *e, ASTScopeImpl *p,
+  NullablePtr<ASTScopeImpl> visitProtocolDecl(ProtocolDecl *e, ASTScopeImpl *p,
                                   ScopeCreator &scopeCreator) {
     e->createGenericParamsIfMissing();
     return scopeCreator
-        .createSubtree2D<NominalTypeScope, GenericTypeOrExtensionWholePortion>(
+        .createSubtree2DIfUnique<NominalTypeScope, GenericTypeOrExtensionWholePortion>(
             p, e);
   }
 
@@ -468,17 +476,17 @@ public:
   // Each of the following creates a new scope, so that nodes which were parsed
   // after them need to be placed in scopes BELOW them in the tree. So pass down
   // the deferred nodes.
-  ASTScopeImpl *visitGuardStmt(GuardStmt *e, ASTScopeImpl *p,
+  NullablePtr<ASTScopeImpl> visitGuardStmt(GuardStmt *e, ASTScopeImpl *p,
                                ScopeCreator &scopeCreator) {
-    return scopeCreator.createSubtree<GuardStmtScope>(p, e);
+    return scopeCreator.createSubtreeIfUnique<GuardStmtScope>(p, e);
   }
-  ASTScopeImpl *visitDoStmt(DoStmt *ds, ASTScopeImpl *p,
+  NullablePtr<ASTScopeImpl> visitDoStmt(DoStmt *ds, ASTScopeImpl *p,
                             ScopeCreator &scopeCreator) {
     return scopeCreator.createScopeFor(ds->getBody(), p);
   }
-  ASTScopeImpl *visitTopLevelCodeDecl(TopLevelCodeDecl *d, ASTScopeImpl *p,
+ NullablePtr<ASTScopeImpl> visitTopLevelCodeDecl(TopLevelCodeDecl *d, ASTScopeImpl *p,
                                       ScopeCreator &scopeCreator) {
-    return scopeCreator.createSubtree<TopLevelCodeScope>(p, d);
+    return scopeCreator.createSubtreeIfUnique<TopLevelCodeScope>(p, d);
   }
 
 #pragma mark special-case creation
@@ -487,26 +495,26 @@ public:
     llvm_unreachable("SourceFiles are orphans.");
   }
 
-  ASTScopeImpl *visitYieldStmt(YieldStmt *ys, ASTScopeImpl *p,
+   NullablePtr<ASTScopeImpl> visitYieldStmt(YieldStmt *ys, ASTScopeImpl *p,
                                ScopeCreator &scopeCreator) {
     for (Expr *e : ys->getYields())
       visitExpr(e, p, scopeCreator);
     return p;
   }
 
-  ASTScopeImpl *visitDeferStmt(DeferStmt *ds, ASTScopeImpl *p,
+   NullablePtr<ASTScopeImpl> visitDeferStmt(DeferStmt *ds, ASTScopeImpl *p,
                                ScopeCreator &scopeCreator) {
     visitFuncDecl(ds->getTempDecl(), p, scopeCreator);
     return p;
   }
 
-  ASTScopeImpl *visitBraceStmt(BraceStmt *bs, ASTScopeImpl *p,
+  NullablePtr<ASTScopeImpl> visitBraceStmt(BraceStmt *bs, ASTScopeImpl *p,
                                ScopeCreator &scopeCreator) {
-    scopeCreator.createSubtree<BraceStmtScope>(p, bs);
+    scopeCreator.createSubtreeIfUnique<BraceStmtScope>(p, bs);
     return p;
   }
 
-  ASTScopeImpl *visitPatternBindingDecl(PatternBindingDecl *patternBinding,
+   NullablePtr<ASTScopeImpl> visitPatternBindingDecl(PatternBindingDecl *patternBinding,
                                         ASTScopeImpl *parentScope,
                                         ScopeCreator &scopeCreator) {
     scopeCreator.createAttachedPropertyWrapperScope(patternBinding,
@@ -519,54 +527,53 @@ public:
                      : DeclVisibilityKind::LocalVariable;
     auto *insertionPoint = parentScope;
     for (unsigned i = 0; i < patternBinding->getPatternList().size(); ++i) {
-      insertionPoint = scopeCreator.createSubtree<PatternEntryDeclScope>(
-          insertionPoint, patternBinding, i, vis);
+      insertionPoint = scopeCreator.createSubtreeIfUnique<PatternEntryDeclScope>(
+          insertionPoint, patternBinding, i, vis).getPtrOr(insertionPoint);
     }
     // If in a type decl, the type search will find these,
     // but if in a brace stmt, must continue under the last binding.
     return isInTypeDecl ? parentScope : insertionPoint;
   }
 
-  ASTScopeImpl *visitEnumElementDecl(EnumElementDecl *eed, ASTScopeImpl *p,
+  ANullablePtr<ASTScopeImpl> visitEnumElementDecl(EnumElementDecl *eed, ASTScopeImpl *p,
                                      ScopeCreator &scopeCreator) {
     if (auto *expr = eed->getRawValueExpr()) // might contain a closure
       visitExpr(expr, p, scopeCreator);
     return p;
   }
 
-  ASTScopeImpl *visitIfConfigDecl(IfConfigDecl *icd, ASTScopeImpl *p,
+  NullablePtr<ASTScopeImpl> visitIfConfigDecl(IfConfigDecl *icd, ASTScopeImpl *p,
                                   ScopeCreator &scopeCreator) {
     for (auto &clause : icd->getClauses()) {
       visitExpr(clause.Cond, p, scopeCreator);
       for (auto n : clause.Elements) {
         // Or maybe skip active clause?? No, source order.
-        if (!scopeCreator.scopedNodes.contains(n))
-          scopeCreator.createScopeFor(n, p);
+        scopeCreator.createScopeFor(n, p);
       }
     }
     return p;
   }
 
-  ASTScopeImpl *visitReturnStmt(ReturnStmt *rs, ASTScopeImpl *p,
+  NullablePtr<ASTScopeImpl> visitReturnStmt(ReturnStmt *rs, ASTScopeImpl *p,
                                 ScopeCreator &scopeCreator) {
     if (rs->hasResult())
       visitExpr(rs->getResult(), p, scopeCreator);
     return p;
   }
 
-  ASTScopeImpl *visitThrowStmt(ThrowStmt *ts, ASTScopeImpl *p,
+  NullablePtr<ASTScopeImpl> visitThrowStmt(ThrowStmt *ts, ASTScopeImpl *p,
                                ScopeCreator &scopeCreator) {
     visitExpr(ts->getSubExpr(), p, scopeCreator);
     return p;
   }
 
-  ASTScopeImpl *visitPoundAssertStmt(PoundAssertStmt *pas, ASTScopeImpl *p,
+  NullablePtr<ASTScopeImpl> visitPoundAssertStmt(PoundAssertStmt *pas, ASTScopeImpl *p,
                                      ScopeCreator &scopeCreator) {
     visitExpr(pas->getCondition(), p, scopeCreator);
     return p;
   }
 
-  ASTScopeImpl *visitExpr(Expr *expr, ASTScopeImpl *p,
+ NullablePtr<ASTScopeImpl> visitExpr(Expr *expr, ASTScopeImpl *p,
                           ScopeCreator &scopeCreator) {
     if (expr) {
       p->widenSourceRangeForIgnoredASTNode(expr);
@@ -580,7 +587,7 @@ public:
 
 // These definitions are way down here so it can call into
 // ASTVisitorForScopeCreation
-ASTScopeImpl *ScopeCreator::createScopeFor(ASTNode n, ASTScopeImpl *parent) {
+NullablePtr<ASTScopeImpl> ScopeCreator::createScopeFor(ASTNode n, ASTScopeImpl *parent) {
   if (!shouldCreateScope(n))
     return parent;
   if (auto *p = n.dyn_cast<Decl *>())
@@ -598,8 +605,7 @@ void ScopeCreator::addChildrenForAllExplicitAccessors(AbstractStorageDecl *asd,
       // Accessors are always nested within their abstract storage
       // declaration. The nesting may not be immediate, because subscripts may
       // have intervening scopes for generics.
-      if (!scopedNodes.contains(accessor) &&
-          parent->getEnclosingAbstractStorageDecl() == accessor->getStorage())
+      if (parent->getEnclosingAbstractStorageDecl() == accessor->getStorage())
         ASTVisitorForScopeCreation().visitAbstractFunctionDecl(accessor, parent,
                                                                *this);
     }
@@ -713,8 +719,8 @@ AbstractFunctionParamsScope::expandAScopeThatCreatesANewInsertionPoint(
   // Unlike generic parameters or pattern initializers, it cannot refer to a
   // previous parameter.
   for (ParamDecl *pd : params->getArray()) {
-    if (!scopeCreator.scopedNodes.contains(pd) && pd->getDefaultValue())
-      scopeCreator.createSubtree<DefaultArgumentInitializerScope>(this, pd);
+    if (pd->getDefaultValue())
+      scopeCreator.createSubtreeIfUnique<DefaultArgumentInitializerScope>(this, pd);
   }
   return this; // body of func goes under me
 }
@@ -756,7 +762,7 @@ ASTScopeImpl *PatternEntryUseScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
   // Add accessors for the variables in this pattern.
   forEachVarDeclWithExplicitAccessors(scopeCreator, [&](VarDecl *var) {
-    scopeCreator.createSubtree<VarDeclScope>(this, var);
+    scopeCreator.createSubtreeIfUnique<VarDeclScope>(this, var);
   });
   return this;
 }
@@ -883,10 +889,8 @@ void DoCatchStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   scopeCreator.createScopeFor(stmt->getBody(), this);
 
   for (auto catchClause : stmt->getCatches()) {
-    if (!scopeCreator.scopedNodes.contains(catchClause)) {
-      ASTVisitorForScopeCreation().visitCatchStmt(catchClause, this,
+    ASTVisitorForScopeCreation().visitCatchStmt(catchClause, this,
                                                   scopeCreator);
-    }
   }
 }
 
@@ -896,10 +900,8 @@ void SwitchStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
                                          scopeCreator);
 
   for (auto caseStmt : stmt->getCases()) {
-    if (!scopeCreator.scopedNodes.contains(caseStmt) &&
-        !caseStmt->isImplicit()) {
-      scopeCreator.createSubtree<CaseStmtScope>(this, caseStmt);
-    }
+    if (!caseStmt->isImplicit())
+      scopeCreator.createSubtreeIfUnique<CaseStmtScope>(this, caseStmt);
   }
 }
 
@@ -1098,8 +1100,6 @@ AbstractPatternEntryScope::AbstractPatternEntryScope(
 void AbstractPatternEntryScope::forEachVarDeclWithExplicitAccessors(
     ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const {
   getPatternEntry().getPattern()->forEachVariable([&](VarDecl *var) {
-    if (scopeCreator.scopedNodes.contains(var))
-      return;
     const bool hasAccessors = var->getBracesRange().isValid();
     if (hasAccessors && !var->isImplicit())
       foundOne(var);
@@ -1239,8 +1239,7 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
     };
     auto addNewScope = [&] {
       auto *nextNew = *nextNewMember++;
-      if (!scopeCreator.scopedNodes.contains(nextNew))
-        scopeCreator.createScopeFor(nextNew, this);
+      scopeCreator.createScopeForIfUnique(nextNew, this);
     };
 
     if (nextOldScope == oldChildren.end()) {
