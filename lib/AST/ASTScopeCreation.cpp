@@ -275,8 +275,8 @@ private:
     assert(p);
     bool r = registerDuplicate ? !astDuplicates.insert(p).second
                                : bool(astDuplicates.count(p));
-    llvm::errs() << "HERE " << p << " reg: " << registerDuplicate
-                 << " is: " << r << "\n";
+    //    llvm::errs() << "isDuplicate " << p << " reg: " << registerDuplicate
+    //                 << " is: " << r << "\n";
   }
 
 private:
@@ -1375,12 +1375,12 @@ std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
     llvm::errs() << "\n";
   };
 
-  //HERE dump("BEFORE");
+  // dump("BEFORE");
 
   // Common case is building first time and is sorted
   if (!std::is_sorted(sortedMembers.begin(), sortedMembers.end(), cmp))
     std::stable_sort(sortedMembers.begin(), sortedMembers.end(), cmp);
-  //HERE dump("AFTER");
+  // dump("AFTER");
   return sortedMembers;
 }
 
