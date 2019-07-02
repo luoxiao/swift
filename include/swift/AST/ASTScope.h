@@ -248,6 +248,9 @@ public:
   virtual NullablePtr<Decl> getDeclIfAny() const { return nullptr; };
   virtual NullablePtr<Stmt> getStmtIfAny() const { return nullptr; };
   virtual NullablePtr<Expr> getExprIfAny() const { return nullptr; };
+  virtual NullablePtr<DeclAttribute> getDeclAttributeIfAny() const {
+    return nullptr;
+  }
 
 #pragma mark - debugging and printing
 
@@ -1290,6 +1293,10 @@ public:
 
   NullablePtr<AbstractStorageDecl>
   getEnclosingAbstractStorageDecl() const override;
+
+  NullablePtr<DeclAttribute> getDeclAttributeIfAny() const override {
+    return specializeAttr;
+  }
 
 protected:
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,

@@ -17,6 +17,7 @@
 
 #include "swift/AST/ASTContext.h"
 #include "swift/AST/ASTWalker.h"
+#include "swift/AST/Attr.h"
 #include "swift/AST/Decl.h"
 #include "swift/AST/Expr.h"
 #include "swift/AST/Initializer.h"
@@ -239,14 +240,7 @@ public:
     // they get created directly by the pattern code.
     // Doing otherwise distorts the source range
     // of their parents.
-
-    if (PatternEntryDeclScope::isHandledSpecially(n))
-      return false;
-
-    if (isDuplicate(n))
-      return false;
-
-    return true;
+    return !PatternEntryDeclScope::isHandledSpecially(n) && !isDuplicate(n);
   }
 
   template <typename ASTNodelike>
@@ -255,33 +249,59 @@ public:
       pushIfNecessary(nodesToPrepend[i]);
   }
 
-  /// If isDuplicate is called to prevent creating a scope, the corresponding
-  /// scope class must implement removeFromDuplicates
+public:
   bool isDuplicate(ASTNode n, bool registerDuplicate = true) {
-    if (auto *d = n.dyn_cast<Decl *>())
-      return isDuplicate(d, registerDuplicate);
-    if (auto *s = n.dyn_cast<Stmt *>())
-      return isDuplicate(s, registerDuplicate);
-    return isDuplicate(n.get<Expr *>(), registerDuplicate);
+    PtrCalc pc;
+    if (auto *p = n.dyn_cast<Decl *>())
+      return pc.visit(p);
+    if (auto *p = n.dyn_cast<Stmt *>())
+      return pc.visit(p);
+    if (auto *p = n.dyn_cast<Expr *>())
+      return pc.visit(p);
+    llvm_unreachable("impossible");
+  }
+  template <typename T> bool isDuplicate(T *p, bool registerDuplicate = true) {
+    return isDuplicateImpl(PtrCalc().visit(p), registerDuplicate);
   }
 
-  bool isDuplicate(void *p, bool registerDuplicate = true) {
+  template <typename T> void removeFromDuplicates(T x) {
+    removeFromDuplicatesImpl(PtrCalc().visit(x));
+  }
+
+private:
+  /// If isDuplicate is called to prevent creating a scope, the corresponding
+  /// scope class must implement removeFromDuplicates
+  bool isDuplicateImpl(void *p, bool registerDuplicate = true) {
+    assert(p);
     if (registerDuplicate)
       return !astDuplicates.insert(p).second;
     return astDuplicates.count(p);
   }
 
-  void removeFromDuplicates(void *p) { astDuplicates.erase(p); }
-
-  void removeFromDuplicates(ASTNode n) {
-    if (!n)
-      return;
-    if (auto *d = n.dyn_cast<Decl *>())
-      removeFromDuplicates(d);
-    if (auto *s = n.dyn_cast<Stmt *>())
-      removeFromDuplicates(s);
-    removeFromDuplicates(n.get<Expr *>());
+private:
+  void removeFromDuplicatesImpl(void *p) {
+    assert(p);
+    astDuplicates.erase(p);
   }
+
+  /// Use me with any ASTNode, Expr*, Decl*, or Stmt*
+  /// I will yield a void* that is the same, even when given an Expr* and a
+  /// ClosureExor* because I take the Expr*, figure its real class, then up
+  /// cast.
+  class PtrCalc : public ASTVisitor<PtrCalc, void *, void *, void *, void *,
+                                    void *, void *> {
+  public:
+    // Call these only from the superclass
+    void *visitDecl(Decl *e) { return e; }
+    void *visitStmt(Stmt *e) { return e; }
+    void *visitExpr(Expr *e) { return e; }
+    void *visitDeclAttribute(DeclAttribute *e) { return e; }
+
+// Provide default implementations for statements as ASTVisitor does for Exprs
+#define STMT(CLASS, PARENT)                                                    \
+  void *visit##CLASS##Stmt(CLASS##Stmt *S) { return visitStmt(S); }
+#include "swift/AST/StmtNodes.def"
+  };
 
 public:
   void dump() const { print(llvm::errs()); }
@@ -1209,12 +1229,6 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
 
   auto nextOldScope = oldChildren.begin();
   auto nextNewMember = newMembers.begin();
-  //  llvm::errs() << "HERE new mem\n\n";
-  //  for (auto *m: newMembers) {
-  //    m->dump();
-  //    llvm::errs() << "\n";
-  //  }
-  //  llvm::errs() << "\n\n end new em HERE\n";
   while (true) {
     auto reuseOldScope = [&] {
       addChild(*nextOldScope++, scopeCreator.getASTContext());
@@ -1223,10 +1237,6 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
       auto *nextNew = *nextNewMember++;
       if (!scopeCreator.isDuplicate(nextNew))
         scopeCreator.createScopeFor(nextNew, this);
-      else {
-        //          llvm::errs() << "HERE dup ";
-        //          nextNew->dump();
-      }
     };
 
     if (nextOldScope == oldChildren.end()) {
@@ -1290,7 +1300,6 @@ void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
     return;
   if (explicitMemberCount == idc->getExplicitMemberCount())
     return;
-  // os = &llvm::errs(); // HERE
   if (os) {
     *os.get() << "*** Pre reexpansion: ***\n";
     print(*os.get());
@@ -1381,6 +1390,8 @@ void ASTScopeImpl::removeFromDuplicates(ScopeCreator &scopeCreator) const {
     scopeCreator.removeFromDuplicates(p);
   else if (auto *p = getExprIfAny().getPtrOrNull())
     scopeCreator.removeFromDuplicates(p);
+  else if (auto *a = getDeclAttributeIfAny().getPtrOrNull())
+    scopeCreator.removeFromDuplicates(a);
 }
 
 #pragma mark getScopeCreator
