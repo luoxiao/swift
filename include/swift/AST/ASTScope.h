@@ -162,10 +162,6 @@ protected:
 
   const Children &getChildren() const { return storedChildren; }
 
-  /// Does exactly the right thing when coping with an addition to members, so
-  /// that old scopes can be reused.
-  const Children getAndDisownChildren();
-
   /// Get ride of descendants and remove them from scopedNodes so the scopes
   /// can be recreated. Needed because typechecking inserts a return statment
   /// into intiailizers.
@@ -940,7 +936,6 @@ public:
   virtual NullablePtr<DeclContext> getDeclContext() const override;
   virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
   Decl *getDecl() const { return decl; }
-  NullablePtr<const void> getReferrent() const override;
 
 protected:
   Optional<bool>

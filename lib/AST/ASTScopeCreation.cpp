@@ -728,8 +728,7 @@ AbstractFunctionParamsScope::expandAScopeThatCreatesANewInsertionPoint(
   // previous parameter.
   for (ParamDecl *pd : params->getArray()) {
     if (pd->getDefaultValue())
-      scopeCreator.createSubtreeIfUnique<DefaultArgumentInitializerScope>(this,
-                                                                          pd);
+      scopeCreator.createSubtree<DefaultArgumentInitializerScope>(this, pd);
   }
   return this; // body of func goes under me
 }
@@ -1372,9 +1371,7 @@ GET_REFERRENT(GenericParamScope, paramList->getParams()[index])
 GET_REFERRENT(AbstractStmtScope, getStmt())
 GET_REFERRENT(CaptureListScope, getExpr())
 GET_REFERRENT(WholeClosureScope, getExpr())
-GET_REFERRENT(DefaultArgumentInitializerScope, decl->getDefaultValue())
 GET_REFERRENT(SpecializeAttributeScope, specializeAttr)
-
 GET_REFERRENT(GenericTypeOrExtensionScope, portion->getReferrentOfScope(this));
 
 const Decl *
