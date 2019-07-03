@@ -45,6 +45,11 @@ namespace {
 class PtrCalc : public ASTVisitor<PtrCalc, void *, void *, void *, void *,
                                   void *, void *> {
 public:
+  template <typename T>
+  const void* visit(const T* x) {
+    return const_cast<T*>(x);
+  }
+
   // Call these only from the superclass
   void *visitDecl(Decl *e) { return e; }
   void *visitStmt(Stmt *e) { return e; }
@@ -59,35 +64,22 @@ public:
 
 /// A set that does the right pointer calculation
 class NodeSet {
-  llvm::DenseSet<const void *> pointers;
-  NullablePtr<const void> ptr(const ASTNode n) {
-    // clang-format off
-      if (auto *p = n.dyn_cast<Decl *>())  return ptr(p);
-      if (auto *p = n.dyn_cast<Stmt *>())  return ptr(p);
-      if (auto *p = n.dyn_cast<Expr *>())  return ptr(p);
-    // clang-format on
-    llvm_unreachable("impossible");
-  }
-  template <typename T> NullablePtr<const void> ptr(const T *p) {
-    return PtrCalc().visit(const_cast<T *>(p));
-  }
-  template <>
-  NullablePtr<const void> ptr<ASTScopeImpl>(const ASTScopeImpl *const scope) {
-    return scope->referrent();
-  }
+  ::llvm::DenseSet<const void *> pointers;
 
 public:
-  template <typename T> bool contains(T x) {
-    const void *p = ptr(x).getPtrOrNull();
-    return pointers.count(p);
+  bool contains(const ASTScopeImpl *const s) {
+    if (auto *r = s->getReferrent().getPtrOrNull())
+      return pointers.count(r);
+    return false; // never exclude a non-checkable scope
   }
-  template <typename T> bool insert(T x) {
-    const void *p = ptr(x).getPtrOrNull();
-    return pointers.insert(p).second;
+  bool insert(const ASTScopeImpl *const s) {
+    if (auto *r = s->getReferrent().getPtrOrNull())
+      return pointers.insert(r).second;
+    return true;
   }
-  template <typename T> void erase(T x) {
-    const void *p = ptr(x).getPtrOrNull();
-    pointers.erase(p);
+  void erase(const ASTScopeImpl *const s) {
+    if (auto *r = s->getReferrent().getPtrOrNull())
+      pointers.erase(r);
   }
 };
 } // namespace
@@ -193,22 +185,24 @@ public:
   /// receive more decls.
    template <typename Scope, typename... Args>
   ASTScopeImpl *createSubtree(ASTScopeImpl *parent, Args... args) {
+    Scope dryRun(args...);
+    assert(!dryRun.referrent() && "Not checking for dup but class supports it");
     return createSubtreeImpl<Scope>(parent, args...);
   }
   
   template <typename Scope, typename... Args>
   NullablePtr<ASTScopeImpl> createSubtreeIfUnique(ASTScopeImpl *parent, Args... args) {
     Scope dryRun(args...);
-  #error static typing on the scope
+    assert(dryRun.referrent() && "Checking for dup but class does not support it");
     if (scopedNodes.insert(&dryRun))
       return createSubtreeImpl<Scope>(parent, args...);
+    return nullptr;
   }
   
   private:
   template <typename Scope, typename... Args>
   ASTScopeImpl *createSubtreeImpl(ASTScopeImpl *parent, Args... args) {
-   #error static typing on the scope
-   auto *child = new (ctx) Scope(args...);
+    auto *child = new (ctx) Scope(args...);
     parent->addChild(child, ctx);
     return child->expandMe(*this);
   }
@@ -383,7 +377,7 @@ namespace ast_scope {
 class ASTVisitorForScopeCreation
     : public ASTVisitor<ASTVisitorForScopeCreation, NullablePtr<ASTScopeImpl>,
                         NullablePtr<ASTScopeImpl>, NullablePtr<ASTScopeImpl>, void, void, void,
-                        NullablePtr<ASTScopeImpl>, ScopeCreator &> {
+                        ASTScopeImpl*, ScopeCreator &> {
 public:
 
 #pragma mark ASTNodes that do not create scopes
@@ -1381,4 +1375,34 @@ ScopeCreator &ASTScopeImpl::getScopeCreator() {
   return getParent().get()->getScopeCreator();
 }
 
-ScopeCreator &ASTSourceFileScope::getScopeCreator() { return *scopeCreator; }
+#pragma mark getReferrent
+
+// These are the scopes whose ASTNodes (etc) might be duplicated in the AST
+// getReferrent is the cookie used to dedup them
+
+#define GET_REFERRENT(Scope, x) \
+  NullablePtr<const void> Scope::getReferrent() const { return PtrCalc().visit(x); }
+
+GET_REFERRENT( AbstractFunctionDeclScope, getDecl())
+GET_REFERRENT( PatternEntryDeclScope, getDecl())
+GET_REFERRENT( TopLevelCodeScope, getDecl())
+GET_REFERRENT( SubscriptDeclScope, getDecl())
+GET_REFERRENT( VarDeclScope, getDecl())
+GET_REFERRENT( GenericParamScope, paramList->getParams()[index])
+GET_REFERRENT( AbstractStmtScope, getStmt())
+GET_REFERRENT( CaptureListScope, getExpr())
+GET_REFERRENT( WholeClosureScope, getExpr())
+GET_REFERRENT( DefaultArgumentInitializerScope, decl->getDefaultValue())
+GET_REFERRENT( SpecializeAttributeScope, specializeAttr)
+
+GET_REFERRENT( GenericTypeOrExtensionScope, portion->getReferrentOfScope(this));
+
+const Decl* Portion::getReferrentOfScope(const GenericTypeOrExtensionScope *s) const {
+    llvm_unreachable("Only whole scope has referrent");
+  };
+
+ const Decl* GenericTypeOrExtensionWholePortion::getReferrentOfScope(const GenericTypeOrExtensionScope *s) const {
+    return s->getDecl();
+ };
+
+#undef GET_REFERRENT
