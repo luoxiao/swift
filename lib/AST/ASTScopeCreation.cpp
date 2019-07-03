@@ -199,6 +199,13 @@ public:
     return nullptr;
   }
   
+  template <typename Scope, typename... Args>
+  ASTScopeImpl *createSubtreeMustBeUnique(ASTScopeImpl *parent, Args... args) {
+    if (auto s = createSubtreeIfUnique<Scope>(parent, args...))
+      return s.get();
+    llvm_unreachable("Scope should have been unique");
+  }
+  
   private:
   template <typename Scope, typename... Args>
   ASTScopeImpl *createSubtreeImpl(ASTScopeImpl *parent, Args... args) {
@@ -979,7 +986,7 @@ void CaptureListScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
 
 void ClosureBodyScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  scopeCreator.createSubtree<BraceStmtScope>(this, closureExpr->getBody());
+  scopeCreator.createSubtreeMustBeUnique<BraceStmtScope>(this, closureExpr->getBody());
 }
 
 void DefaultArgumentInitializerScope::
