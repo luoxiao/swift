@@ -824,7 +824,9 @@ ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  return scopeCreator.createSubtree<BraceStmtScope>(this, decl->getBody());
+  return scopeCreator
+      .createSubtreeIfUnique<BraceStmtScope>(this, decl->getBody())
+      .getPtrOr(this);
 }
 
 #pragma mark expandAScopeThatDoesNotCreateANewInsertionPoint
@@ -974,7 +976,7 @@ void SubscriptDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
 void WholeClosureScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     ScopeCreator &scopeCreator) {
   if (auto *cl = captureList.getPtrOrNull())
-    scopeCreator.createSubtree<CaptureListScope>(this, cl);
+    scopeCreator.createSubtreeMustBeUnique<CaptureListScope>(this, cl);
   ASTScopeImpl *bodyParent = this;
   if (closureExpr->getInLoc().isValid())
     bodyParent = scopeCreator.createSubtree<ClosureParametersScope>(
