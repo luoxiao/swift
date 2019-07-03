@@ -639,16 +639,6 @@ void ASTScopeImpl::addChild(ASTScopeImpl *child, ASTContext &ctx) {
   child->parent = this;
 }
 
-const ASTScopeImpl::Children ASTScopeImpl::getAndDisownChildren() {
-  // Because type-checking can add a return to a brace stmt constructor body,
-  // must do the right thing for rebuilding fn bodies so disown must undup
-  Children r = getChildren();
-  storedChildren.clear();
-  for (auto *c : r)
-    c->emancipate(); // so it can be added back without tripping assertion
-  return r;
-}
-
 void ASTScopeImpl::disownDescendants(ScopeCreator &scopeCreator) {
   for (auto *c : getChildren()) {
     c->disownDescendants(scopeCreator);
@@ -1242,48 +1232,16 @@ void GenericTypeOrExtensionScope::expandBody(
 void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
                                    const bool inOrderToIncorporateAdditions) {
 
-  const SourceManager &SM = scopeCreator.getASTContext().SourceMgr;
-  auto newMembers = getExplicitMembersInSourceOrder(scopeCreator);
-
-  const Children oldChildren = getAndDisownChildren();
-
-  auto nextOldScope = oldChildren.begin();
-  auto nextNewMember = newMembers.begin();
-  while (true) {
-    auto reuseOldScope = [&] {
-      addChild(*nextOldScope++, scopeCreator.getASTContext());
-    };
-    auto addNewScope = [&] {
-      auto *nextNew = *nextNewMember++;
-      scopeCreator.createScopeFor(nextNew, this);
-    };
-
-    if (nextOldScope == oldChildren.end()) {
-      while (nextNewMember != newMembers.end())
-        addNewScope();
-      break;
-    }
-    if (nextNewMember == newMembers.end()) {
-      while (nextOldScope != oldChildren.end())
-        reuseOldScope();
-      break;
-    }
-    // FIXME: assumes nextOldScope points to a scope with nonnull getDeclIfAny
-    auto *const oldDecl = (*nextOldScope)->getDeclIfAny().get();
-    auto oldEnd = oldDecl->getEndLoc();
-    auto newEnd = (*nextNewMember)->getEndLoc();
-    if (SM.isBeforeInBuffer(oldEnd, newEnd))
-      reuseOldScope();
-    else if (SM.isBeforeInBuffer(newEnd, oldEnd))
-      addNewScope();
-    else {
-      assert(oldDecl == *nextNewMember && "Decls should be fermions.");
-      reuseOldScope();
-      ++nextNewMember;
-    }
-  }
-  explicitMemberCount =
+  // Only handle additions
+  const auto newExplicitMemberCount =
       getIterableDeclContext().get()->getExplicitMemberCount();
+
+  if (explicitMemberCount != newExplicitMemberCount) {
+    disownDescendants(scopeCreator);
+    for (auto n : getExplicitMembersInSourceOrder(scopeCreator))
+      scopeCreator.createScopeFor(n, this);
+    explicitMemberCount = newExplicitMemberCount;
+  }
 }
 
 #pragma mark - reexpandIfObsolete
