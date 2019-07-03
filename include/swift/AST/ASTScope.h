@@ -505,8 +505,9 @@ public:
 
   virtual void reexpandScopeIfObsolete(IterableTypeScope *, ScopeCreator &,
                                        NullablePtr<raw_ostream>) const;
-  
-  virtual const Decl* getReferrentOfScope(const GenericTypeOrExtensionScope *s) const;
+
+  virtual const Decl *
+  getReferrentOfScope(const GenericTypeOrExtensionScope *s) const;
   };
 
   // For the whole Decl scope of a GenericType or an Extension
@@ -524,8 +525,9 @@ public:
 
     NullablePtr<const ASTScopeImpl>
     getLookupLimitFor(const GenericTypeOrExtensionScope *) const override;
-    
-    const Decl* getReferrentOfScope(const GenericTypeOrExtensionScope *s) const override;
+
+    const Decl *
+    getReferrentOfScope(const GenericTypeOrExtensionScope *s) const override;
   };
 
   /// GenericTypeOrExtension = GenericType or Extension
@@ -606,6 +608,7 @@ public:
   virtual Decl *getDecl() const = 0;
   NullablePtr<Decl> getDeclIfAny() const override { return getDecl(); }
   NullablePtr<const void> getReferrent() const override;
+
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
 
@@ -827,8 +830,9 @@ public:
 
   NullablePtr<AbstractStorageDecl>
   getEnclosingAbstractStorageDecl() const override;
-  
+
   NullablePtr<const void> getReferrent() const override;
+
 protected:
   Decl *getEnclosingAbstractFunctionOrSubscriptDecl() const override;
 
@@ -936,7 +940,8 @@ public:
   virtual NullablePtr<DeclContext> getDeclContext() const override;
   virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
   Decl *getDecl() const { return decl; }
-   NullablePtr<const void> getReferrent() const override;
+  NullablePtr<const void> getReferrent() const override;
+
 protected:
   Optional<bool>
   resolveIsCascadingUseForThisScope(Optional<bool>) const override;
@@ -1211,7 +1216,8 @@ public:
   SourceRange getChildlessSourceRange() const override;
   NullablePtr<Expr> getExprIfAny() const override { return closureExpr; }
   Expr *getExpr() const { return closureExpr; }
-  NullablePtr<const void> getReferrent() const override;};
+  NullablePtr<const void> getReferrent() const override;
+};
 
 /// For a closure with named parameters, this scope does the local bindings.
 /// Absent if no "in".
@@ -1276,7 +1282,8 @@ public:
   }
   virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
   Decl *getDecl() const { return decl; }
-  NullablePtr<const void> getReferrent() const override;};
+  NullablePtr<const void> getReferrent() const override;
+};
 
 /// The \c _@specialize attribute.
 class SpecializeAttributeScope final : public ASTScopeImpl {
@@ -1305,6 +1312,7 @@ public:
     return specializeAttr;
   }
   NullablePtr<const void> getReferrent() const override;
+
 protected:
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
                              DeclConsumer) const override;
@@ -1336,6 +1344,7 @@ public:
   virtual NullablePtr<Decl> getDeclIfAny() const override { return decl; }
   Decl *getDecl() const { return decl; }
   NullablePtr<const void> getReferrent() const override;
+
 protected:
   Decl *getEnclosingAbstractFunctionOrSubscriptDecl() const override;
 
@@ -1383,7 +1392,8 @@ public:
   SourceRange getChildlessSourceRange() const override;
   virtual Stmt *getStmt() const = 0;
   NullablePtr<Stmt> getStmtIfAny() const override { return getStmt(); }
-  NullablePtr<const void> getReferrent() const override;};
+  NullablePtr<const void> getReferrent() const override;
+};
 
 class LabeledConditionalStmtScope : public AbstractStmtScope {
 public:
@@ -1536,7 +1546,7 @@ public:
   ForEachStmt *const stmt;
   ForEachPatternScope(ForEachStmt *e) : stmt(e) {}
   virtual ~ForEachPatternScope() {}
-  
+
   ASTScopeImpl *expandMe(ScopeCreator &scopeCreator) override;
 
 private:
