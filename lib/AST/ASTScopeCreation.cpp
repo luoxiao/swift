@@ -839,7 +839,7 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   // Create scopes for specialize attributes
   scopeCreator.forEachSpecializeAttrInSourceOrder(
       decl, [&](SpecializeAttr *specializeAttr) {
-        scopeCreator.createSubtree<SpecializeAttributeScope>(
+        scopeCreator.createSubtreeIfUnique<SpecializeAttributeScope>(
             this, specializeAttr, decl);
       });
   // Create scopes for generic and ordinary parameters.
