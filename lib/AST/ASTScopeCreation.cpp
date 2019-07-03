@@ -53,12 +53,18 @@ public:
   void *visitDecl(Decl *e) { return e; }
   void *visitStmt(Stmt *e) { return e; }
   void *visitExpr(Expr *e) { return e; }
+  void *visitPattern(Pattern *e) { return e; }
   void *visitDeclAttribute(DeclAttribute *e) { return e; }
 
 // Provide default implementations for statements as ASTVisitor does for Exprs
 #define STMT(CLASS, PARENT)                                                    \
   void *visit##CLASS##Stmt(CLASS##Stmt *S) { return visitStmt(S); }
 #include "swift/AST/StmtNodes.def"
+
+// Provide default implementations for patterns as ASTVisitor does for Exprs
+#define PATTERN(CLASS, PARENT)                                                 \
+  void *visit##CLASS##Pattern(CLASS##Pattern *S) { return visitPattern(S); }
+#include "swift/AST/PatternNodes.def"
 };
 
 /// A set that does the right pointer calculation
@@ -1356,7 +1362,9 @@ ScopeCreator &ASTSourceFileScope::getScopeCreator() { return *scopeCreator; }
   }
 
 GET_REFERRENT(AbstractFunctionDeclScope, getDecl())
-GET_REFERRENT(PatternEntryDeclScope, getDecl())
+// If the PatternBindingDecl is a dup, detect it for the first
+// PatternEntryDeclScope; the others are subscopes.
+GET_REFERRENT(PatternEntryDeclScope, getPattern())
 GET_REFERRENT(TopLevelCodeScope, getDecl())
 GET_REFERRENT(SubscriptDeclScope, getDecl())
 GET_REFERRENT(VarDeclScope, getDecl())
