@@ -178,7 +178,6 @@ private:
   NullablePtr<ASTScopeImpl> getPriorSibling() const;
 
 public:
-  NullablePtr<const void> referrent() const;
   void postOrderDo(function_ref<void(ASTScopeImpl *)>);
 
 #pragma mark - source ranges

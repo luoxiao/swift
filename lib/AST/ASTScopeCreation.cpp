@@ -186,14 +186,14 @@ public:
    template <typename Scope, typename... Args>
   ASTScopeImpl *createSubtree(ASTScopeImpl *parent, Args... args) {
     Scope dryRun(args...);
-    assert(!dryRun.referrent() && "Not checking for dup but class supports it");
+    assert(!dryRun.getReferrent() && "Not checking for dup but class supports it");
     return createSubtreeImpl<Scope>(parent, args...);
   }
   
   template <typename Scope, typename... Args>
   NullablePtr<ASTScopeImpl> createSubtreeIfUnique(ASTScopeImpl *parent, Args... args) {
     Scope dryRun(args...);
-    assert(dryRun.referrent() && "Checking for dup but class does not support it");
+    assert(dryRun.getReferrent() && "Checking for dup but class does not support it");
     if (scopedNodes.insert(&dryRun))
       return createSubtreeImpl<Scope>(parent, args...);
     return nullptr;
@@ -1358,21 +1358,13 @@ std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
   return sortedMembers;
 }
 
-NullablePtr<const void> ASTScopeImpl::referrent() const {
-  if (auto *p = getDeclIfAny().getPtrOrNull())
-    return PtrCalc().visit(p);
-  if (auto *p = getStmtIfAny().getPtrOrNull())
-    return PtrCalc().visit(p);
-  if (auto *p = getExprIfAny().getPtrOrNull())
-    return PtrCalc().visit(p);
-  if (auto *p = getDeclAttributeIfAny().getPtrOrNull())
-    return PtrCalc().visit(p);
-  return nullptr;
-}
-
 #pragma mark getScopeCreator
 ScopeCreator &ASTScopeImpl::getScopeCreator() {
   return getParent().get()->getScopeCreator();
+}
+
+ScopeCreator &ASTSourceFileScope::getScopeCreator() {
+  return *scopeCreator;
 }
 
 #pragma mark getReferrent
@@ -1398,7 +1390,7 @@ GET_REFERRENT( SpecializeAttributeScope, specializeAttr)
 GET_REFERRENT( GenericTypeOrExtensionScope, portion->getReferrentOfScope(this));
 
 const Decl* Portion::getReferrentOfScope(const GenericTypeOrExtensionScope *s) const {
-    llvm_unreachable("Only whole scope has referrent");
+    return nullptr;
   };
 
  const Decl* GenericTypeOrExtensionWholePortion::getReferrentOfScope(const GenericTypeOrExtensionScope *s) const {
