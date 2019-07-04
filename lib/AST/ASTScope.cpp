@@ -80,17 +80,6 @@ AbstractClosureScope::getClosureIfClosureScope() const {
   return closureExpr;
 }
 
-Decl *ASTScopeImpl::getEnclosingAbstractFunctionOrSubscriptDecl() const {
-  return getParent().get()->getEnclosingAbstractFunctionOrSubscriptDecl();
-}
-Decl *
-AbstractFunctionDeclScope::getEnclosingAbstractFunctionOrSubscriptDecl() const {
-  return decl;
-}
-Decl *SubscriptDeclScope::getEnclosingAbstractFunctionOrSubscriptDecl() const {
-  return decl;
-}
-
 // Conservative, because using precise info would be circular
 SourceRange AttachedPropertyWrapperScope::getCustomAttributesSourceRange(
     const VarDecl *const vd) {

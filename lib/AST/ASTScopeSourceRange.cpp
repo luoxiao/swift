@@ -305,27 +305,17 @@ SourceRange AbstractFunctionDeclScope::getChildlessSourceRange() const {
 }
 
 SourceRange AbstractFunctionParamsScope::getChildlessSourceRange() const {
-  auto *fn = getEnclosingAbstractFunctionOrSubscriptDecl();
-  const SourceLoc endLoc = fn->getEndLoc();
-
-  // FIXME: Why oh why don't deinitializers have a parameter list?
-
-  // clang-format off
-  SourceLoc startLoc =
-  isa<AccessorDecl>(fn)         ? fn->getLoc() :
-  isa<DestructorDecl>(fn)       ? dyn_cast<DestructorDecl>(fn)->getNameLoc() :
-  isa<SubscriptDecl>(fn)        ? dyn_cast<SubscriptDecl>(fn)->getIndices()->getLParenLoc() :
-  isa<AbstractFunctionDecl>(fn) ? dyn_cast<AbstractFunctionDecl>(fn)->getParameters()->getLParenLoc() :
-                                    SourceLoc();
-  // clang-format on
-
-  const SourceLoc safeEndLocEvenWithBadInput =
-      getSourceManager().isBeforeInBuffer(startLoc, endLoc) ? endLoc : startLoc;
-
-  assert(startLoc.isValid());
-  return SourceRange(startLoc, safeEndLocEvenWithBadInput);
+  const auto rangeForGoodInput = getParamsSourceRange();
+  return SourceRange(rangeForGoodInput.Start,
+                     fixupEndForBadInput(rangeForGoodInput));
 }
 
+SourceLoc AbstractFunctionParamsScope::fixupEndForBadInput(
+    const SourceRange rangeForGoodInput) const {
+  const auto s = rangeForGoodInput.Start;
+  const auto e = rangeForGoodInput.End;
+  return getSourceManager().isBeforeInBuffer(s, e) ? e : s;
+}
 
 SourceRange ForEachPatternScope::getChildlessSourceRange() const {
   // The scope of the pattern extends from the 'where' expression (if present)
@@ -513,3 +503,34 @@ static SourceLoc getStartOfFirstParam(ClosureExpr *closure) {
     return closure->getBody()->getLBraceLoc();
   return closure->getStartLoc();
 }
+
+#pragma mark getParamsSourceRange
+
+SourceRange ASTScopeImpl::getParamsSourceRange() const {
+  return getParent().get()->getParamsSourceRange();
+}
+
+SourceRange SubscriptDeclScope::getParamsSourceRange() const {
+  return SourceRange(decl->getIndices()->getLParenLoc(), decl->getEndLoc());
+}
+
+SourceRange AbstractFunctionDeclScope::getParamsSourceRange() const {
+  return SourceRange(getParamsSourceLoc(), getChildlessSourceRange().End);
+}
+
+SourceLoc AbstractFunctionDeclScope::getParamsSourceLoc() const {
+  if (auto *c = dyn_cast<ConstructorDecl>(decl))
+    return c->getParameters()->getLParenLoc();
+
+  if (auto *dd = dyn_cast<DestructorDecl>(decl))
+    return dd->getNameLoc();
+
+  auto *fd = cast<FuncDecl>(decl);
+  // clang-format off
+  return isa<AccessorDecl>(fd) ? fd->getLoc()
+       : fd->isDeferBody()     ? fd->getNameLoc()
+       :                         fd->getParameters()->getLParenLoc();
+  // clang-format on
+}
+
+

@@ -190,7 +190,7 @@ protected:
   bool verifyThatChildrenAreContained() const;
   bool verifyThatThisNodeComeAfterItsPriorSibling() const;
 
-  virtual Decl *getEnclosingAbstractFunctionOrSubscriptDecl() const;
+  virtual SourceRange getParamsSourceRange() const;
 
 public:
   virtual NullablePtr<ClosureExpr> getClosureIfClosureScope() const;
@@ -830,8 +830,12 @@ public:
   NullablePtr<const void> getReferrent() const override;
 
 protected:
-  Decl *getEnclosingAbstractFunctionOrSubscriptDecl() const override;
+  SourceRange getParamsSourceRange() const override;
 
+private:
+  SourceLoc getParamsSourceLoc() const;
+
+protected:
   NullablePtr<const GenericParamList> genericParams() const override;
 
   Optional<bool>
@@ -855,6 +859,7 @@ public:
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
+  SourceLoc fixupEndForBadInput(SourceRange) const;
 
 public:
   std::string getClassName() const override;
@@ -1341,7 +1346,7 @@ public:
   NullablePtr<const void> getReferrent() const override;
 
 protected:
-  Decl *getEnclosingAbstractFunctionOrSubscriptDecl() const override;
+  SourceRange getParamsSourceRange() const override;
 
   NullablePtr<const GenericParamList> genericParams() const override;
   NullablePtr<AbstractStorageDecl>
