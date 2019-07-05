@@ -327,6 +327,10 @@ protected:
   /// Not const because may reexpand some scopes.
   const ASTScopeImpl *findInnermostEnclosingScope(SourceLoc,
                                                   NullablePtr<raw_ostream>);
+  const ASTScopeImpl *findInnermostEnclosingScopeImpl(SourceLoc,
+                                                      NullablePtr<raw_ostream>,
+                                                      SourceManager &,
+                                                      ScopeCreator &);
 
 private:
   NullablePtr<ASTScopeImpl> findChildContaining(SourceLoc loc,

@@ -102,15 +102,19 @@ const ASTScopeImpl *ASTScopeImpl::findStartingScopeForLookup(
 const ASTScopeImpl *
 ASTScopeImpl::findInnermostEnclosingScope(SourceLoc loc,
                                           NullablePtr<raw_ostream> os) {
-  SourceManager &sourceMgr = getSourceManager();
-  ScopeCreator &scopeCreator = getScopeCreator();
+  return findInnermostEnclosingScopeImpl(loc, os, getSourceManager(),
+                                         getScopeCreator());
+}
 
-  const auto *s = this;
-  for (NullablePtr<ASTScopeImpl> c;
-       (c = s->findChildContaining(loc, sourceMgr)); s = c.get()) {
-    c.get()->reexpandIfObsolete(scopeCreator, os);
-  }
-  return s;
+const ASTScopeImpl *ASTScopeImpl::findInnermostEnclosingScopeImpl(
+    SourceLoc loc, NullablePtr<raw_ostream> os, SourceManager &sourceMgr,
+    ScopeCreator &scopeCreator) {
+  reexpandIfObsolete(scopeCreator, os);
+  auto child = findChildContaining(loc, sourceMgr);
+  if (!child)
+    return this;
+  return child.get()->findInnermostEnclosingScopeImpl(loc, os, sourceMgr,
+                                                      scopeCreator);
 }
 
 NullablePtr<ASTScopeImpl>

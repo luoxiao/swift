@@ -511,7 +511,11 @@ SourceRange ASTScopeImpl::getParamsSourceRange() const {
 }
 
 SourceRange SubscriptDeclScope::getParamsSourceRange() const {
-  return SourceRange(decl->getIndices()->getLParenLoc(), decl->getEndLoc());
+  auto r = SourceRange(decl->getIndices()->getLParenLoc(), decl->getEndLoc());
+  // Because of "subscript(x: MyStruct#^PARAM_1^#) -> Int { return 0 }"
+  // Cannot just use decl->getEndLoc()
+  r.widen(decl->getIndices()->getRParenLoc());
+  return r;
 }
 
 SourceRange AbstractFunctionDeclScope::getParamsSourceRange() const {
