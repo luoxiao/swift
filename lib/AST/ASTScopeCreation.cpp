@@ -368,22 +368,13 @@ void ASTSourceFileScope::addNewDeclsToTree() {
   if (newDecls.empty())
     return;
 
-  insertionPoint->ensureSourceRangesAreCorrectWhenAddingDescendants([&] {
-    insertionPoint = scopeCreator->addScopesToTree(insertionPoint, newDecls);
-  });
+  insertionPoint = scopeCreator->addScopesToTree(insertionPoint, newDecls);
   numberOfDeclsAlreadySeen = SF->Decls.size();
 }
 
 ASTSourceFileScope::ASTSourceFileScope(SourceFile *SF,
                                        ScopeCreator *scopeCreator)
     : SF(SF), scopeCreator(scopeCreator), insertionPoint(this) {}
-
-void ASTScopeImpl::ensureSourceRangesAreCorrectWhenAddingDescendants(
-    function_ref<void()> modify) {
-  clearCachedSourceRangesOfMeAndAncestors();
-  modify();
-  cacheSourceRangesOfSlice();
-}
 
 #pragma mark ASTVisitorForScopeCreation
 
@@ -643,6 +634,12 @@ void ASTScopeImpl::addChild(ASTScopeImpl *child, ASTContext &ctx) {
   storedChildren.push_back(child);
   assert(!child->getParent() && "child should not already have parent");
   child->parent = this;
+  clearCachedSourceRangesOfMeAndAncestors();
+}
+
+void ASTScopeImpl::removeChildren() {
+  clearCachedSourceRangesOfMeAndAncestors();
+  storedChildren.clear();
 }
 
 void ASTScopeImpl::disownDescendants(ScopeCreator &scopeCreator) {
@@ -651,7 +648,7 @@ void ASTScopeImpl::disownDescendants(ScopeCreator &scopeCreator) {
     c->emancipate();
     scopeCreator.scopedNodes.erase(c);
   }
-  storedChildren.clear();
+  removeChildren();
 }
 
 bool PatternEntryDeclScope::isHandledSpecially(const ASTNode n) {
@@ -746,7 +743,6 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
     auto *initializer =
         scopeCreator.createSubtree<PatternEntryInitializerScope>(
             this, decl, patternEntryIndex, vis);
-    initializer->cacheSourceRange();
     initializerEnd = initializer->getSourceRange().End;
   }
   // If there are no uses of the declararations, add the accessors immediately.
@@ -1219,16 +1215,10 @@ void *ScopeCreator::operator new(size_t bytes, const ASTContext &ctx,
 
 void AbstractFunctionBodyScope::expandBody(
     ScopeCreator &scopeCreator, const bool inOrderToIncorporateAdditions) {
-  // We create body scopes when there is no body for source kit to complete
-  // erroneous code in bodies.
   BraceStmt *braceStmt = decl->getBody();
-  if (bodyWhenLastExpanded != braceStmt) {
-    disownDescendants(scopeCreator);
-    if (braceStmt)
-      ASTVisitorForScopeCreation().visitBraceStmt(braceStmt, this,
-                                                  scopeCreator);
-  }
-  bodyWhenLastExpanded = decl->getBody();
+  if (braceStmt)
+    ASTVisitorForScopeCreation().visitBraceStmt(braceStmt, this, scopeCreator);
+  bodyWhenLastExpanded = braceStmt;
 }
 
 void GenericTypeOrExtensionScope::expandBody(
@@ -1261,9 +1251,11 @@ void IterableTypeScope::reexpandIfObsolete(ScopeCreator &scopeCreator,
 
 void AbstractFunctionBodyScope::reexpandIfObsolete(
     ScopeCreator &scopeCreator, NullablePtr<raw_ostream> os) {
-  ensureSourceRangesAreCorrectWhenAddingDescendants([&] {
+  // Implicit return statements get inserted post-hoc
+  if (bodyWhenLastExpanded != decl->getBody()) {
+    disownDescendants(scopeCreator);
     expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/true);
-  });
+  }
 }
 
 void Portion::reexpandScopeIfObsolete(IterableTypeScope *, ScopeCreator &,
@@ -1286,9 +1278,7 @@ void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
     *os.get() << "*** Pre reexpansion: ***\n";
     print(*os.get());
   }
-  ensureSourceRangesAreCorrectWhenAddingDescendants([&] {
-    expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/true);
-  });
+  expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/true);
   if (os) {
     *os.get() << "\n***Post reexpansion: ***\n";
     print(*os.get());
