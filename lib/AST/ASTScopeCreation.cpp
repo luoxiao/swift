@@ -255,8 +255,10 @@ private:
 
   // A safe way to discover this, without creating a circular request.
   // Cannot call getAttachedPropertyWrappers.
-  static bool hasCustomAttribute(VarDecl *vd) {
-    return vd->getAttrs().getAttribute<CustomAttr>();
+  static bool hasAttachedPropertyWrapper(VarDecl *vd) {
+    return AttachedPropertyWrapperScope::getAttachedPropertyWrapperSourceRange(
+        vd)
+        .isValid();
   }
 
 public:
@@ -268,8 +270,8 @@ public:
  
     patternBinding->getPattern(0)->forEachVariable([&](VarDecl *vd) {
         // assume all same as first
-      if (hasCustomAttribute(vd))
-        createSubtree<AttachedPropertyWrapperScope>(parent, vd);
+        if (hasAttachedPropertyWrapper(vd))
+          createSubtree<AttachedPropertyWrapperScope>(parent, vd);
     });
   }
 
