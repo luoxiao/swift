@@ -81,8 +81,8 @@ AbstractClosureScope::getClosureIfClosureScope() const {
 }
 
 // Conservative, because using precise info would be circular
-SourceRange AttachedPropertyWrapperScope::getAttachedPropertyWrapperSourceRange(
-    const VarDecl *const vd) {
+SourceRange
+AttachedPropertyWrapperScope::getSourceRangeFor(const VarDecl *const vd) {
   SourceRange sr;
   for (auto *attr : vd->getAttrs().getAttributes<CustomAttr>()) {
     if (sr.isInvalid())

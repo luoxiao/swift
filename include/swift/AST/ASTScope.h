@@ -991,7 +991,7 @@ public:
   NullablePtr<const void> addressForPrinting() const override { return decl; }
   virtual NullablePtr<DeclContext> getDeclContext() const override;
 
-  static SourceRange getAttachedPropertyWrapperSourceRange(const VarDecl *);
+  static SourceRange getSourceRangeFor(const VarDecl *);
 
 private:
   void expandAScopeThatDoesNotCreateANewInsertionPoint(ScopeCreator &);

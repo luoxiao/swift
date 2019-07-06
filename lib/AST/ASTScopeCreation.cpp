@@ -256,9 +256,7 @@ private:
   // A safe way to discover this, without creating a circular request.
   // Cannot call getAttachedPropertyWrappers.
   static bool hasAttachedPropertyWrapper(VarDecl *vd) {
-    return AttachedPropertyWrapperScope::getAttachedPropertyWrapperSourceRange(
-        vd)
-        .isValid();
+    return AttachedPropertyWrapperScope::getSourceRangeFor(vd).isValid();
   }
 
 public:
@@ -267,9 +265,7 @@ public:
 
   void createAttachedPropertyWrapperScope(PatternBindingDecl *patternBinding,
                                           ASTScopeImpl *parent) {
- 
     patternBinding->getPattern(0)->forEachVariable([&](VarDecl *vd) {
-        // assume all same as first
         if (hasAttachedPropertyWrapper(vd))
           createSubtree<AttachedPropertyWrapperScope>(parent, vd);
     });
