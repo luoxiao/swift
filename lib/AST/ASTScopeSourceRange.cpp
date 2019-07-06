@@ -408,7 +408,7 @@ ClosureBodyScope::getChildlessSourceRange(const bool omitAssertions) const {
 
 SourceRange AttachedPropertyWrapperScope::getChildlessSourceRange(
     const bool omitAssertions) const {
-  return getSourceRangeFor(decl);
+  return sourceRangeWhenCreated;
 }
 
 SourceRange

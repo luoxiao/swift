@@ -980,8 +980,13 @@ protected:
 class AttachedPropertyWrapperScope final : public ASTScopeImpl {
 public:
   VarDecl *const decl;
+  /// Because we have to avoid request cycles, we approximate the test for an AttachedPropertyWrapper
+  /// with one based on source location. We might get false positives, that that doesn't hurt anything.
+  /// However, the result of the conservative source range computation doesn't seem to be stable.
+  /// So keep the original here, and use it for source range queries.
+  const SourceRange sourceRangeWhenCreated;
 
-  AttachedPropertyWrapperScope(VarDecl *e) : decl(e) {}
+  AttachedPropertyWrapperScope(VarDecl *e) : decl(e), sourceRangeWhenCreated(getSourceRangeFor(e)) {assert(sourceRangeWhenCreated.isValid());}
   virtual ~AttachedPropertyWrapperScope() {}
 
   ASTScopeImpl *expandMe(ScopeCreator &) override;
