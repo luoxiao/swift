@@ -549,20 +549,28 @@ public:
   NullablePtr<ASTScopeImpl> visitIfConfigDecl(IfConfigDecl *icd,
                                               ASTScopeImpl *p,
                                               ScopeCreator &scopeCreator) {
-    NullablePtr<ASTScopeImpl> insertionPoint = p;
+    auto *activeClauseLookupParent = p;
+    // Generate scopes for each clause
     for (auto &clause : icd->getClauses()) {
+      // Generate scopes for any closures in the condition
       visitExpr(clause.Cond, p, scopeCreator);
-      NullablePtr<ASTScopeImpl> insertionPointForThisClause;
+      // First element in this clause will be under the enclosing scope
+      auto *insertionPointForThisClause = p;
       for (auto n : clause.Elements) {
         // Or maybe skip active clause?? No, source order.
-        insertionPointForThisClause = scopeCreator.createScopeFor(n, p);
+        insertionPointForThisClause =
+            scopeCreator.createScopeFor(n, insertionPointForThisClause)
+                .getPtrOr(insertionPointForThisClause);
       }
-      if (clause.isActive && insertionPointForThisClause) {
-        assert(insertionPoint == p && ">1 active clause?!");
-        insertionPoint = insertionPointForThisClause;
+      // Remember the insertionPoint/lookupParent of the active clause
+      if (clause.isActive) {
+        assert(activeClauseLookupParent == p && ">1 active clause?!");
+        activeClauseLookupParent = insertionPointForThisClause;
       }
     }
-    return insertionPoint;
+    // Subsequent decls, etc. must inherit lookup from the active clause
+    return scopeCreator.createSubtree<LookupParentDiversionScope>(
+        p, activeClauseLookupParent, icd->getEndLoc());
   }
 
   NullablePtr<ASTScopeImpl> visitReturnStmt(ReturnStmt *rs, ASTScopeImpl *p,
@@ -716,7 +724,7 @@ NO_EXPANSION(ClosureParametersScope)
 NO_EXPANSION(SpecializeAttributeScope)
 // no accessors, unlike PatternEntryUseScope
 NO_EXPANSION(ConditionalClausePatternUseScope)
-NO_EXPANSION(GuardStmtUseScope)
+NO_EXPANSION(LookupParentDiversionScope)
 
 #undef CREATES_NEW_INSERTION_POINT
 #undef NO_NEW_INSERTION_POINT
@@ -802,7 +810,7 @@ ASTScopeImpl *GuardStmtScope::expandAScopeThatCreatesANewInsertionPoint(
   // Parent is whole guard stmt scope, NOT the cond scopes
   scopeCreator.createScopeFor(stmt->getBody(), this);
 
-  return scopeCreator.createSubtree<GuardStmtUseScope>(
+  return scopeCreator.createSubtree<LookupParentDiversionScope>(
       this, conditionLookupParent, stmt->getEndLoc());
 }
 

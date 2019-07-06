@@ -411,8 +411,8 @@ SourceRange AttachedPropertyWrapperScope::getChildlessSourceRange(
   return sourceRangeWhenCreated;
 }
 
-SourceRange
-GuardStmtUseScope::getChildlessSourceRange(const bool omitAssertions) const {
+SourceRange LookupParentDiversionScope::getChildlessSourceRange(
+    const bool omitAssertions) const {
   return SourceRange(startLoc);
 }
 
