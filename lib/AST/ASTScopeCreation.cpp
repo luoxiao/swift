@@ -549,14 +549,20 @@ public:
   NullablePtr<ASTScopeImpl> visitIfConfigDecl(IfConfigDecl *icd,
                                               ASTScopeImpl *p,
                                               ScopeCreator &scopeCreator) {
+    NullablePtr<ASTScopeImpl> insertionPoint = p;
     for (auto &clause : icd->getClauses()) {
       visitExpr(clause.Cond, p, scopeCreator);
+      NullablePtr<ASTScopeImpl> insertionPointForThisClause;
       for (auto n : clause.Elements) {
         // Or maybe skip active clause?? No, source order.
-        scopeCreator.createScopeFor(n, p);
+        insertionPointForThisClause = scopeCreator.createScopeFor(n, p);
+      }
+      if (clause.isActive && insertionPointForThisClause) {
+        assert(insertionPoint == p && ">1 active clause?!");
+        insertionPoint = insertionPointForThisClause;
       }
     }
-    return p;
+    return insertionPoint;
   }
 
   NullablePtr<ASTScopeImpl> visitReturnStmt(ReturnStmt *rs, ASTScopeImpl *p,
