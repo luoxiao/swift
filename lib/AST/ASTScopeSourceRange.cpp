@@ -191,7 +191,9 @@ AbstractStmtScope::getChildlessSourceRange(const bool omitAssertions) const {
 
 SourceRange DefaultArgumentInitializerScope::getChildlessSourceRange(
     const bool omitAssertions) const {
-  return decl->getDefaultValue()->getSourceRange();
+  if (auto *dv = decl->getDefaultValue())
+    return dv->getSourceRange();
+  return SourceRange();
 }
 
 SourceRange PatternEntryDeclScope::getChildlessSourceRange(
