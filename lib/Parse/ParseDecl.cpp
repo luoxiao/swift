@@ -3176,9 +3176,10 @@ void Parser::parseDeclDelayed() {
         // FIXME: unify notification to ASTSourceFileScope with addMember
         // mechanism used above
         SF->Decls.push_back(D);
-      } else
-        llvm_unreachable(
-            "ASTScope lookup needs delayed Decls to be included in parents");
+      }
+//      else
+//        llvm_unreachable(
+//            "ASTScope lookup needs delayed Decls to be included in parents");
     }
   });
 }
