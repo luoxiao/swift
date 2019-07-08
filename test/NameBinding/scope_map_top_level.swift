@@ -26,7 +26,7 @@ var i: Int = b.my_identity()
 
 
 // CHECK-EXPANDED:      ***Complete scope map***
-// CHECK-EXPANDED-NEXT: ASTSourceFileScope {{.*}}, [1:1 - 65:1] 'SOURCE_DIR{{[/\\]}}test{{[/\\]}}NameBinding{{[/\\]}}scope_map_top_level.swift'
+// CHECK-EXPANDED-NEXT: ASTSourceFileScope {{.*}}, (uncached) [1:1 - 65:1] 'SOURCE_DIR/test/NameBinding/scope_map_top_level.swift'
 // CHECK-EXPANDED-NEXT: |-NominalTypeDeclScope {{.*}}, [4:1 - 4:13] 'S0'
 // CHECK-EXPANDED-NEXT:   `-NominalTypeBodyScope {{.*}}, [4:11 - 4:13] 'S0'
 // CHECK-EXPANDED-NEXT: `-TopLevelCodeScope {{.*}}, [6:1 - 21:28]
@@ -40,7 +40,7 @@ var i: Int = b.my_identity()
 // CHECK-EXPANDED-NEXT:               |-ConditionalClauseScope, [8:7 - 8:22] index 0
 // CHECK-EXPANDED-NEXT:                 `-ConditionalClausePatternUseScope, [8:22 - 8:22] let b?
 // CHECK-EXPANDED-NEXT:               |-BraceStmtScope {{.*}}, [8:22 - 9:1]
-// CHECK-EXPANDED-NEXT:               `-GuardStmtUseScope, [9:1 - 21:28]
+// CHECK-EXPANDED-NEXT:               `-LookupParentDiversionScope, [9:1 - 21:28]
 // CHECK-EXPANDED-NEXT:                 |-AbstractFunctionDeclScope {{.*}}, [11:1 - 11:13] 'foo()'
 // CHECK-EXPANDED-NEXT:                   `-AbstractFunctionParamsScope {{.*}}, [11:9 - 11:13]
 // CHECK-EXPANDED-NEXT:                     `-PureFunctionBodyScope {{.*}}, [11:12 - 11:13]
