@@ -760,9 +760,11 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
   // If there are no uses of the declararations, add the accessors immediately.
   // Create unconditionally because more nodes might be added to SourceFile later.
   // Note: the accessors will follow the pattern binding.
+  
+  // Create this for accessors in var decls for now. (forEachVarDeclWithExplicitAccessors)
   auto *useScope = scopeCreator.createSubtree<PatternEntryUseScope>(
       this, decl, patternEntryIndex, vis, initializerEnd);
-  return useScope;
+  return getParent().get();
 }
 
 ASTScopeImpl *
