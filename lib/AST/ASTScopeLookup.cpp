@@ -329,8 +329,8 @@ bool GenericParamScope::lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
   return consumer.consume({param}, DeclVisibilityKind::GenericParameter);
 }
 
-bool PatternEntryUseScope::lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
-                                                 DeclConsumer consumer) const {
+bool PatternEntryDeclScope::lookupLocalsOrMembers(
+    ArrayRef<const ASTScopeImpl *>, DeclConsumer consumer) const {
   if (vis != DeclVisibilityKind::LocalVariable)
     return false; // look in self type will find this later
   return lookupLocalBindingsInPattern(getPattern(), vis, consumer);
@@ -414,9 +414,8 @@ bool BraceStmtScope::lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
   SmallVector<ValueDecl *, 32> localBindings;
   for (auto braceElement : stmt->getElements()) {
     if (auto localBinding = braceElement.dyn_cast<Decl *>()) {
-      if (isa<AbstractFunctionDecl>(localBinding) ||
-          isa<TypeDecl>(localBinding))
-        localBindings.push_back(cast<ValueDecl>(localBinding));
+      if (auto *vd = dyn_cast<ValueDecl>(localBinding))
+        localBindings.push_back(vd);
     }
   }
   return consumer.consume(localBindings, DeclVisibilityKind::LocalVariable);

@@ -207,21 +207,6 @@ SourceRange PatternEntryInitializerScope::getChildlessSourceRange(
 }
 
 SourceRange
-PatternEntryUseScope::getChildlessSourceRange(const bool omitAssertions) const {
-  auto range =
-      SourceRange(getPatternEntry().getSourceRange(/*omitAccessors*/ true).End,
-                  getPatternEntry().getSourceRange().End);
-  if (initializerEnd.isValid()) {
-    // Sigh... If there's a correspinding initializer scope, its range may be
-    // wider than the pattern decl indicates if it ends in an interpolated
-    // string literal or editor placeholder.
-    range.widen(SourceRange(initializerEnd));
-    range.Start = initializerEnd;
-  }
-  return range;
-}
-
-SourceRange
 VarDeclScope::getChildlessSourceRange(const bool omitAssertions) const {
   return decl->getBracesRange();
 }

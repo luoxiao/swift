@@ -693,7 +693,6 @@ CREATES_NEW_INSERTION_POINT(ConditionalClauseScope)
 CREATES_NEW_INSERTION_POINT(GuardStmtScope)
 CREATES_NEW_INSERTION_POINT(PatternEntryDeclScope)
 CREATES_NEW_INSERTION_POINT(PatternEntryInitializerScope)
-CREATES_NEW_INSERTION_POINT(PatternEntryUseScope)
 CREATES_NEW_INSERTION_POINT(GenericTypeOrExtensionScope)
 CREATES_NEW_INSERTION_POINT(BraceStmtScope)
 CREATES_NEW_INSERTION_POINT(TopLevelCodeScope)
@@ -722,7 +721,6 @@ NO_EXPANSION(GenericParamScope)
 NO_EXPANSION(ASTSourceFileScope)
 NO_EXPANSION(ClosureParametersScope)
 NO_EXPANSION(SpecializeAttributeScope)
-// no accessors, unlike PatternEntryUseScope
 NO_EXPANSION(ConditionalClausePatternUseScope)
 NO_EXPANSION(LookupParentDiversionScope)
 
@@ -757,13 +755,11 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
             this, decl, patternEntryIndex, vis);
     initializerEnd = initializer->getSourceRange().End;
   }
-  // If there are no uses of the declararations, add the accessors immediately.
-  // Create unconditionally because more nodes might be added to SourceFile later.
-  // Note: the accessors will follow the pattern binding.
-  
-  // Create this for accessors in var decls for now. (forEachVarDeclWithExplicitAccessors)
-  auto *useScope = scopeCreator.createSubtree<PatternEntryUseScope>(
-      this, decl, patternEntryIndex, vis, initializerEnd);
+  // Add accessors for the variables in this pattern.
+  forEachVarDeclWithExplicitAccessors(scopeCreator, [&](VarDecl *var) {
+    scopeCreator.createSubtreeIfUnique<VarDeclScope>(this, var);
+  });
+
   return getParent().get();
 }
 
@@ -773,15 +769,6 @@ PatternEntryInitializerScope::expandAScopeThatCreatesANewInsertionPoint(
   // Create a child for the initializer expression.
   ASTVisitorForScopeCreation().visitExpr(getPatternEntry().getInitAsWritten(),
                                          this, scopeCreator);
-  return this;
-}
-
-ASTScopeImpl *PatternEntryUseScope::expandAScopeThatCreatesANewInsertionPoint(
-    ScopeCreator &scopeCreator) {
-  // Add accessors for the variables in this pattern.
-  forEachVarDeclWithExplicitAccessors(scopeCreator, [&](VarDecl *var) {
-    scopeCreator.createSubtreeIfUnique<VarDeclScope>(this, var);
-  });
   return this;
 }
 

@@ -1069,6 +1069,10 @@ public:
 
   static bool isHandledSpecially(const ASTNode n);
   NullablePtr<const void> getReferrent() const override;
+
+protected:
+  bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
+                             DeclConsumer) const override;
 };
 
 class PatternEntryInitializerScope final : public AbstractPatternEntryScope {
@@ -1097,35 +1101,6 @@ protected:
 
   Optional<bool>
   resolveIsCascadingUseForThisScope(Optional<bool>) const override;
-};
-
-class PatternEntryUseScope final : public AbstractPatternEntryScope {
-public:
-  /// If valid, I must not start before this.
-  /// Pattern won't tell me where the initializer really ends because it may end
-  /// in an EditorPlaceholder or InterpolatedStringLiteral Those tokens can
-  /// contain names to look up after their source locations.
-  const SourceLoc initializerEnd;
-
-  PatternEntryUseScope(PatternBindingDecl *pbDecl, unsigned entryIndex,
-                       DeclVisibilityKind vis, SourceLoc initializerEnd)
-      : AbstractPatternEntryScope(pbDecl, entryIndex, vis),
-        initializerEnd(initializerEnd) {}
-  virtual ~PatternEntryUseScope() {}
-
-  ASTScopeImpl *expandMe(ScopeCreator &scopeCreator) override;
-
-private:
-  ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
-
-public:
-  std::string getClassName() const override;
-  SourceRange
-  getChildlessSourceRange(bool omitAssertions = false) const override;
-
-protected:
-  bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
-                             DeclConsumer) const override;
 };
 
 /// The scope introduced by a conditional clause in an if/guard/while
