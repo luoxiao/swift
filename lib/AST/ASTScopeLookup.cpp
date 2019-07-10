@@ -109,7 +109,7 @@ ASTScopeImpl::findInnermostEnclosingScope(SourceLoc loc,
 const ASTScopeImpl *ASTScopeImpl::findInnermostEnclosingScopeImpl(
     SourceLoc loc, NullablePtr<raw_ostream> os, SourceManager &sourceMgr,
     ScopeCreator &scopeCreator) {
-  reexpandIfObsolete(scopeCreator, os);
+  reexpandIfObsolete(scopeCreator);
   auto child = findChildContaining(loc, sourceMgr);
   if (!child)
     return this;

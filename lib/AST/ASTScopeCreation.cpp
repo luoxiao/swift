@@ -221,7 +221,7 @@ private:
   ASTScopeImpl *createSubtreeImpl(ASTScopeImpl *parent, Args... args) {
     auto *child = new (ctx) Scope(args...);
     parent->addChild(child, ctx);
-    return child->expandMe(*this);
+    return child->expandAndBeCurrent(*this);
   }
 
 public:
@@ -671,24 +671,31 @@ bool PatternEntryDeclScope::isHandledSpecially(const ASTNode n) {
   return false;
 }
 
-#pragma mark specific implementations of expansion
+#pragma mark implementations of expansion
+
+ASTScopeImpl *ASTScopeImpl::expandAndBeCurrent(ScopeCreator &scopeCreator) {
+  auto *insertionPoint = expandSpecifically(scopeCreator);
+  beCurrent();
+  setChildrenCountWhenLastExpanded();
+  return insertionPoint;
+}
 
   // Do this whole bit so it's easy to see which type of scope is which
 
 #define CREATES_NEW_INSERTION_POINT(Scope)                                     \
-  ASTScopeImpl *Scope::expandMe(ScopeCreator &scopeCreator) {                  \
+  ASTScopeImpl *Scope::expandSpecifically(ScopeCreator &scopeCreator) {        \
     return expandAScopeThatCreatesANewInsertionPoint(scopeCreator);            \
   }
 
 #define NO_NEW_INSERTION_POINT(Scope)                                          \
-  ASTScopeImpl *Scope::expandMe(ScopeCreator &scopeCreator) {                  \
+  ASTScopeImpl *Scope::expandSpecifically(ScopeCreator &scopeCreator) {        \
     expandAScopeThatDoesNotCreateANewInsertionPoint(scopeCreator);             \
     return getParent().get();                                                  \
   }
 
 // Return this in particular for GenericParamScope so body is scoped under it
 #define NO_EXPANSION(Scope)                                                    \
-  ASTScopeImpl *Scope::expandMe(ScopeCreator &) { return this; }
+  ASTScopeImpl *Scope::expandSpecifically(ScopeCreator &) { return this; }
 
 CREATES_NEW_INSERTION_POINT(AbstractFunctionParamsScope)
 CREATES_NEW_INSERTION_POINT(ConditionalClauseScope)
@@ -813,20 +820,14 @@ GenericTypeOrExtensionScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  auto *insertionPoint =
-      scopeCreator.addScopesToTree(this, stmt->getElements());
-  childrenCountWhenLastExpanded = getChildren().size();
-  return insertionPoint;
+  return scopeCreator.addScopesToTree(this, stmt->getElements());
 }
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  bodyWhenLastExpanded = decl->getBody();
   auto *insertionPoint =
       scopeCreator.createSubtreeIfUnique<BraceStmtScope>(this, decl->getBody())
           .getPtrOr(this);
-  bodyScopeWhenLastExpanded =
-      getChildren().empty() ? nullptr : getChildren().front();
   return insertionPoint;
 }
 
@@ -872,7 +873,7 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
 
 void AbstractFunctionBodyScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/false);
+  expandBody(scopeCreator);
 }
 
 void IfStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
@@ -1042,7 +1043,7 @@ ASTScopeImpl *GenericTypeOrExtensionWholePortion::expandScope(
 ASTScopeImpl *
 IterableTypeBodyPortion::expandScope(GenericTypeOrExtensionScope *scope,
                                      ScopeCreator &scopeCreator) const {
-  scope->expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/false);
+  scope->expandBody(scopeCreator);
   return scope->getParent().get();
 }
 
@@ -1223,87 +1224,33 @@ void *ScopeCreator::operator new(size_t bytes, const ASTContext &ctx,
 
 #pragma mark - expandBody
 
-void AbstractFunctionBodyScope::expandBody(
-    ScopeCreator &scopeCreator, const bool inOrderToIncorporateAdditions) {
+void AbstractFunctionBodyScope::expandBody(ScopeCreator &scopeCreator) {
   BraceStmt *braceStmt = decl->getBody();
   if (braceStmt)
     ASTVisitorForScopeCreation().visitBraceStmt(braceStmt, this, scopeCreator);
-  bodyWhenLastExpanded = braceStmt;
 }
 
-void GenericTypeOrExtensionScope::expandBody(
-    ScopeCreator &, bool inOrderToIncorporateAdditions) {}
+void GenericTypeOrExtensionScope::expandBody(ScopeCreator &) {}
 
-void IterableTypeScope::expandBody(ScopeCreator &scopeCreator,
-                                   const bool inOrderToIncorporateAdditions) {
-
-  // Only handle additions
-  const auto newExplicitMemberCount =
+void IterableTypeScope::expandBody(ScopeCreator &scopeCreator) {
+  for (auto n : getExplicitMembersInSourceOrder(scopeCreator))
+    scopeCreator.createScopeFor(n, this);
+  explicitMemberCount =
       getIterableDeclContext().get()->getExplicitMemberCount();
-
-  if (explicitMemberCount != newExplicitMemberCount) {
-    disownDescendants(scopeCreator);
-    for (auto n : getExplicitMembersInSourceOrder(scopeCreator))
-      scopeCreator.createScopeFor(n, this);
-    explicitMemberCount = newExplicitMemberCount;
-  }
 }
 
 #pragma mark - reexpandIfObsolete
 
-void ASTScopeImpl::reexpandIfObsolete(ScopeCreator &,
-                                      NullablePtr<raw_ostream>) {}
-
-void IterableTypeScope::reexpandIfObsolete(ScopeCreator &scopeCreator,
-                                           NullablePtr<raw_ostream> os) {
-  portion->reexpandScopeIfObsolete(this, scopeCreator, os);
+void ASTScopeImpl::reexpandIfObsolete(ScopeCreator &scopeCreator) {
+  if (isObsolete())
+    reexpand(scopeCreator);
 }
 
-void AbstractFunctionBodyScope::reexpandIfObsolete(
-    ScopeCreator &scopeCreator, NullablePtr<raw_ostream> os) {
-  // Implicit return statements get inserted post-hoc
-  if (bodyWhenLastExpanded != decl->getBody()) {
-    disownDescendants(scopeCreator);
-    expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/true);
-  }
-}
-
-void TopLevelCodeScope::reexpandIfObsolete(ScopeCreator &scopeCreator,
-                                           NullablePtr<raw_ostream> os) {
-  if (bodyWhenLastExpanded == decl->getBody())
-    return;
-  auto bodyScopesToReuse = rescueBodyScopesToReuse();
+void ASTScopeImpl::reexpand(ScopeCreator &scopeCreator) {
+  auto scopesToReuse = rescueScopesToReuse();
   disownDescendants(scopeCreator);
-  expandMe(scopeCreator);
-  addReusedBodyScopes(bodyScopesToReuse);
-}
-
-void Portion::reexpandScopeIfObsolete(IterableTypeScope *, ScopeCreator &,
-                                      NullablePtr<raw_ostream>) const {}
-
-void IterableTypeBodyPortion::reexpandScopeIfObsolete(
-    IterableTypeScope *scope, ScopeCreator &scopeCreator,
-    NullablePtr<raw_ostream> os) const {
-  scope->reexpandBodyIfObsolete(scopeCreator, os);
-}
-
-void IterableTypeScope::reexpandBodyIfObsolete(ScopeCreator &scopeCreator,
-                                               NullablePtr<raw_ostream> os) {
-  auto *const idc = getIterableDeclContext().getPtrOrNull();
-  if (!idc)
-    return;
-  if (explicitMemberCount == idc->getExplicitMemberCount())
-    return;
-  if (os) {
-    *os.get() << "*** Pre reexpansion: ***\n";
-    print(*os.get());
-  }
-  expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/true);
-  if (os) {
-    *os.get() << "\n***Post reexpansion: ***\n";
-    print(*os.get());
-    *os.get() << "\n";
-  }
+  expandAndBeCurrent(scopeCreator);
+  addReusedScopes(scopesToReuse);
 }
 
 /// The AST contains \c PatternBindingDecls and \c VarDecls which are
@@ -1396,25 +1343,80 @@ const Decl *GenericTypeOrExtensionWholePortion::getReferrentOfScope(
 
 #undef GET_REFERRENT
 
-#pragma mark TopLevelCodeScope body reuse
+#pragma mark currency
+void ASTScopeImpl::beCurrent() {}
+bool ASTScopeImpl::isObsolete() const { return false; }
 
-std::vector<ASTScopeImpl *> TopLevelCodeScope::rescueBodyScopesToReuse() {
-  if (auto *body = bodyScopeWhenLastExpanded.getPtrOrNull())
-    return body->rescueScopesToReuse();
-  return {};
+void IterableTypeScope::beCurrent() { portion->beCurrent(this); }
+bool IterableTypeScope::isObsolete() const { return portion->isObsolete(this); }
+
+void Portion::beCurrent(IterableTypeScope *) const {}
+bool Portion::isObsolete(const IterableTypeScope *) const { return false; }
+
+void IterableTypeBodyPortion::beCurrent(IterableTypeScope *s) const {
+  s->makeBodyCurrent();
+}
+bool IterableTypeBodyPortion::isObsolete(const IterableTypeScope *s) const {
+  return s->isBodyObsolete();
 }
 
-void TopLevelCodeScope::addReusedBodyScopes(
-    ArrayRef<ASTScopeImpl *> scopesToAdd) {
-  assert(scopesToAdd.empty() || bodyScopeWhenLastExpanded.isNonNull());
-  auto &ctx = getASTContext();
-  for (auto *s : scopesToAdd)
-    bodyScopeWhenLastExpanded.get()->addChild(s, ctx);
+void IterableTypeScope::makeBodyCurrent() {
+  explicitMemberCount =
+      getIterableDeclContext().get()->getExplicitMemberCount();
+}
+bool IterableTypeScope::isBodyObsolete() const {
+  return explicitMemberCount !=
+         getIterableDeclContext().get()->getExplicitMemberCount();
 }
 
-std::vector<ASTScopeImpl *> BraceStmtScope::rescueScopesToReuse() {
+void AbstractFunctionBodyScope::beCurrent() {
+  bodyWhenLastExpanded = decl->getBody();
+}
+bool AbstractFunctionBodyScope::isObsolete() const {
+  return bodyWhenLastExpanded != decl->getBody();
+  ;
+}
+
+void TopLevelCodeScope::beCurrent() { bodyWhenLastExpanded = decl->getBody(); }
+bool TopLevelCodeScope::isObsolete() const {
+  return bodyWhenLastExpanded != decl->getBody();
+}
+
+std::vector<ASTScopeImpl *> ASTScopeImpl::rescueScopesToReuse() {
   return rescueYoungestChildren(getChildren().size() -
                                 childrenCountWhenLastExpanded);
+}
+void ASTScopeImpl::addReusedScopes(ArrayRef<ASTScopeImpl *> scopesToAdd) {
+  auto &ctx = getASTContext();
+  for (auto *s : scopesToAdd)
+    addChild(s, ctx);
+}
+// TODO: factor abs fn body scope and top level code scope
+std::vector<ASTScopeImpl *> AbstractFunctionBodyScope::rescueScopesToReuse() {
+  // retrieve the scopes from the body
+  if (getChildren().empty())
+    return {};
+  return getChildren().front()->rescueScopesToReuse();
+}
+void AbstractFunctionBodyScope::addReusedScopes(
+    ArrayRef<ASTScopeImpl *> scopesToAdd) {
+  // add reused scopes to the body
+  if (scopesToAdd.empty())
+    return;
+  getChildren().front()->addReusedScopes(scopesToAdd);
+}
+
+std::vector<ASTScopeImpl *> TopLevelCodeScope::rescueScopesToReuse() {
+  // retrieve the scopes from the body
+  if (getChildren().empty())
+    return {};
+  return getChildren().front()->rescueScopesToReuse();
+}
+void TopLevelCodeScope::addReusedScopes(ArrayRef<ASTScopeImpl *> scopesToAdd) {
+  // add reused scopes to the body
+  if (scopesToAdd.empty())
+    return;
+  getChildren().front()->addReusedScopes(scopesToAdd);
 }
 
 std::vector<ASTScopeImpl *>
@@ -1428,4 +1430,8 @@ ASTScopeImpl::rescueYoungestChildren(const unsigned int count) {
     storedChildren.pop_back();
   }
   return youngestChildren;
+}
+
+void ASTScopeImpl::setChildrenCountWhenLastExpanded() {
+  childrenCountWhenLastExpanded = getChildren().size();
 }
