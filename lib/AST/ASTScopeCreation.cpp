@@ -816,6 +816,7 @@ ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
+  bodyWhenLastExpanded = decl->getBody();
   return scopeCreator
       .createSubtreeIfUnique<BraceStmtScope>(this, decl->getBody())
       .getPtrOr(this);
@@ -1257,6 +1258,14 @@ void AbstractFunctionBodyScope::reexpandIfObsolete(
     disownDescendants(scopeCreator);
     expandBody(scopeCreator, /*inOrderToIncorporateAdditions=*/true);
   }
+}
+
+void TopLevelCodeScope::reexpandIfObsolete(ScopeCreator &scopeCreator,
+                                           NullablePtr<raw_ostream> os) {
+  if (bodyWhenLastExpanded == decl->getBody())
+    return;
+  disownDescendants(scopeCreator);
+  expandMe(scopeCreator);
 }
 
 void Portion::reexpandScopeIfObsolete(IterableTypeScope *, ScopeCreator &,

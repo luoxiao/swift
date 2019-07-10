@@ -1280,10 +1280,13 @@ protected:
 class TopLevelCodeScope final : public ASTScopeImpl {
 public:
   TopLevelCodeDecl *const decl;
+  BraceStmt *bodyWhenLastExpanded;
+
   TopLevelCodeScope(TopLevelCodeDecl *e) : decl(e) {}
   virtual ~TopLevelCodeScope() {}
 
   ASTScopeImpl *expandMe(ScopeCreator &scopeCreator) override;
+  void reexpandIfObsolete(ScopeCreator &, NullablePtr<raw_ostream>) override;
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
