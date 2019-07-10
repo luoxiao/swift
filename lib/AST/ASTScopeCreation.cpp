@@ -142,10 +142,17 @@ public:
   NullablePtr<ASTScopeImpl> createScopeFor(ASTNode, ASTScopeImpl *parent);
 
   bool shouldCreateScope(ASTNode n) const {
-    // Cannot ignore implicit statements because implict return can contain
-    // scopes in the expression, such as closures.
     if (!n)
       return false;
+    if (n.is<Expr *>())
+      return true;
+    // Cannot ignore implicit statements because implict return can contain
+    // scopes in the expression, such as closures.
+    // But must ignore other implicit statements, e.g. brace statments
+    // because they can have no children and no stmt source range.
+    if (auto *s = n.dyn_cast<Stmt *>())
+      return isa<ReturnStmt>(s) || !s->isImplicit();
+
     if (n.is<Stmt *>() || n.is<Expr *>())
       return true;
 
@@ -825,6 +832,8 @@ ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
+  if (decl->getBody()->isImplicit())
+    return getParent().get();
   auto *insertionPoint =
       scopeCreator.createSubtreeIfUnique<BraceStmtScope>(this, decl->getBody())
           .getPtrOr(this);

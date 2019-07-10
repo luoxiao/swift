@@ -433,7 +433,7 @@ void ASTScopeImpl::cacheSourceRangeOfMeAndDescendants(
   // by obviating the need to uncache all the way to the root every time),
   // when caching a range, must ensure all children's ranges are cached.
   for (auto *c : getChildren())
-    c->cacheSourceRangeOfMeAndDescendants();
+    c->cacheSourceRangeOfMeAndDescendants(omitAssertions);
 
   cachedSourceRange = getUncachedSourceRange(omitAssertions);
 }

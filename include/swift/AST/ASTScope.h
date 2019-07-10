@@ -1674,7 +1674,7 @@ class BraceStmtScope final : public AbstractStmtScope {
 
 public:
   BraceStmt *const stmt;
-  BraceStmtScope(BraceStmt *e) : stmt(e) {}
+  BraceStmtScope(BraceStmt *e) : stmt(e) { assert(!stmt->isImplicit()); }
   virtual ~BraceStmtScope() {}
 
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
