@@ -1,4 +1,3 @@
-// XFAIL: enable-astscope-lookup
 // RUN: %target-typecheck-verify-swift -typo-correction-limit 100
 
 class ThisBase1 {

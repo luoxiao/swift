@@ -493,6 +493,7 @@ class LazyProperties {
 
 // CHECK-SEARCHES:      ***Scope at 71:8***
 // CHECK-SEARCHES-NEXT: BraceStmtScope {{.*}}, [69:53 - 72:3]
+// CHECK-SEARCHES-NEXT: Local bindings: c
 // CHECK-SEARCHES-NEXT: ***Scope at 27:20***
 // CHECK-SEARCHES-NEXT: AbstractFunctionParamsScope {{.*}}, [27:13 - 28:3]
 // CHECK-SEARCHES-NEXT: ***Scope at 6:18***

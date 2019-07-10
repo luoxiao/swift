@@ -1,4 +1,3 @@
-// XFAIL: enable-astscope-lookup
 // RUN: %target-swift-emit-silgen %s -verify
 
 /// We emit an invalid forward capture as an 'undef'; make sure

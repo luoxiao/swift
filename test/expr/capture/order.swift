@@ -1,10 +1,9 @@
-// REQUIRES: enable-astscope-lookup
 // RUN: %target-typecheck-verify-swift
 
 func makeIncrementor(amount: Int) -> () -> Int {
   func incrementor() -> Int {
-    currentTotal += amount // expected-error{{use of unresolved identifier 'currentTotal'}}
-    return currentTotal // expected-error{{use of unresolved identifier 'currentTotal'}}
+    currentTotal += amount
+    return currentTotal
   }
   var currentTotal = 0
   currentTotal = 1; _ = currentTotal
@@ -80,7 +79,7 @@ func outOfOrderEnum() {
 
 func captureInClosure() {
   let x = { (i: Int) in
-    currentTotal += i // expected-error{{use of unresolved identifier 'currentTotal'}}
+    currentTotal += i
   }
 
   var currentTotal = 0
