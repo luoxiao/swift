@@ -131,6 +131,8 @@ public:
     for (auto nd : nodesOrDeclsToAdd) {
       if (shouldThisNodeBeScopedWhenEncountered(nd))
         ip = createScopeFor(nd, ip).getPtrOr(ip);
+      else
+        ip->widenSourceRangeForIgnoredASTNode(nd);
     }
     return ip;
   }
@@ -811,15 +813,21 @@ GenericTypeOrExtensionScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  return scopeCreator.addScopesToTree(this, stmt->getElements());
+  auto *insertionPoint =
+      scopeCreator.addScopesToTree(this, stmt->getElements());
+  childrenCountWhenLastExpanded = getChildren().size();
+  return insertionPoint;
 }
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
   bodyWhenLastExpanded = decl->getBody();
-  return scopeCreator
-      .createSubtreeIfUnique<BraceStmtScope>(this, decl->getBody())
-      .getPtrOr(this);
+  auto *insertionPoint =
+      scopeCreator.createSubtreeIfUnique<BraceStmtScope>(this, decl->getBody())
+          .getPtrOr(this);
+  bodyScopeWhenLastExpanded =
+      getChildren().empty() ? nullptr : getChildren().front();
+  return insertionPoint;
 }
 
 #pragma mark expandAScopeThatDoesNotCreateANewInsertionPoint
@@ -1264,8 +1272,10 @@ void TopLevelCodeScope::reexpandIfObsolete(ScopeCreator &scopeCreator,
                                            NullablePtr<raw_ostream> os) {
   if (bodyWhenLastExpanded == decl->getBody())
     return;
+  auto bodyScopesToReuse = rescueBodyScopesToReuse();
   disownDescendants(scopeCreator);
   expandMe(scopeCreator);
+  addReusedBodyScopes(bodyScopesToReuse);
 }
 
 void Portion::reexpandScopeIfObsolete(IterableTypeScope *, ScopeCreator &,
@@ -1385,3 +1395,37 @@ const Decl *GenericTypeOrExtensionWholePortion::getReferrentOfScope(
 };
 
 #undef GET_REFERRENT
+
+#pragma mark TopLevelCodeScope body reuse
+
+std::vector<ASTScopeImpl *> TopLevelCodeScope::rescueBodyScopesToReuse() {
+  if (auto *body = bodyScopeWhenLastExpanded.getPtrOrNull())
+    return body->rescueScopesToReuse();
+  return {};
+}
+
+void TopLevelCodeScope::addReusedBodyScopes(
+    ArrayRef<ASTScopeImpl *> scopesToAdd) {
+  assert(scopesToAdd.empty() || bodyScopeWhenLastExpanded.isNonNull());
+  auto &ctx = getASTContext();
+  for (auto *s : scopesToAdd)
+    bodyScopeWhenLastExpanded.get()->addChild(s, ctx);
+}
+
+std::vector<ASTScopeImpl *> BraceStmtScope::rescueScopesToReuse() {
+  return rescueYoungestChildren(getChildren().size() -
+                                childrenCountWhenLastExpanded);
+}
+
+std::vector<ASTScopeImpl *>
+ASTScopeImpl::rescueYoungestChildren(const unsigned int count) {
+  std::vector<ASTScopeImpl *> youngestChildren;
+  for (unsigned i = getChildren().size() - count; i < getChildren().size(); ++i)
+    youngestChildren.push_back(getChildren()[i]);
+  // So they don't get disowned and children cleared.
+  for (unsigned i = 0; i < count; ++i) {
+    storedChildren.back()->emancipate();
+    storedChildren.pop_back();
+  }
+  return youngestChildren;
+}

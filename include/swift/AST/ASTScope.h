@@ -168,7 +168,9 @@ protected:
   /// into intiailizers.
   void disownDescendants(ScopeCreator &);
 
+public: // for addReusedBodyScopes
   void addChild(ASTScopeImpl *child, ASTContext &);
+  std::vector<ASTScopeImpl *> rescueYoungestChildren(unsigned count);
 
 private:
   void removeChildren();
@@ -305,6 +307,7 @@ public:
 #pragma mark - - creation queries
 public:
   virtual bool isThisAnAbstractStorageDecl() const { return false; }
+  virtual std::vector<ASTScopeImpl *> rescueScopesToReuse() { return {}; }
 
 #pragma mark - lookup
 
@@ -1281,6 +1284,7 @@ class TopLevelCodeScope final : public ASTScopeImpl {
 public:
   TopLevelCodeDecl *const decl;
   BraceStmt *bodyWhenLastExpanded;
+  NullablePtr<ASTScopeImpl> bodyScopeWhenLastExpanded;
 
   TopLevelCodeScope(TopLevelCodeDecl *e) : decl(e) {}
   virtual ~TopLevelCodeScope() {}
@@ -1290,6 +1294,8 @@ public:
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
+  std::vector<ASTScopeImpl *> rescueBodyScopesToReuse();
+  void addReusedBodyScopes(ArrayRef<ASTScopeImpl *>);
 
 public:
   std::string getClassName() const override;
@@ -1638,12 +1644,15 @@ protected:
 };
 
 class BraceStmtScope final : public AbstractStmtScope {
+  unsigned childrenCountWhenLastExpanded = 0;
+
 public:
   BraceStmt *const stmt;
   BraceStmtScope(BraceStmt *e) : stmt(e) {}
   virtual ~BraceStmtScope() {}
 
   ASTScopeImpl *expandMe(ScopeCreator &scopeCreator) override;
+  std::vector<ASTScopeImpl *> rescueScopesToReuse() override;
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
