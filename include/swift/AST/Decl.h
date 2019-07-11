@@ -2929,6 +2929,9 @@ class TypeAliasDecl : public GenericTypeDecl {
   /// The location of the equal '=' token
   SourceLoc EqualLoc;
 
+  /// The end of the type
+  SourceLoc EndLoc;
+
   /// The location of the right-hand side of the typealias binding
   TypeLoc UnderlyingTy;
 
@@ -2944,6 +2947,8 @@ public:
   SourceLoc getEqualLoc() const {
     return EqualLoc;
   }
+
+  void setEndLoc(SourceLoc e) { EndLoc = e; }
 
   TypeLoc &getUnderlyingTypeLoc() {
     return UnderlyingTy;

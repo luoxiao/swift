@@ -3485,7 +3485,7 @@ SourceRange TypeAliasDecl::getSourceRange() const {
     return { TypeAliasLoc, TrailingWhereClauseSourceRange.End };
   if (UnderlyingTy.hasLocation())
     return { TypeAliasLoc, UnderlyingTy.getSourceRange().End };
-  return { TypeAliasLoc, getNameLoc() };
+  return {TypeAliasLoc, EndLoc};
 }
 
 void TypeAliasDecl::setUnderlyingType(Type underlying) {

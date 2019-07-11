@@ -4016,6 +4016,7 @@ parseDeclTypeAlias(Parser::ParseDeclOptions Flags, DeclAttributes &Attributes) {
     }
 
     UnderlyingTy = parseType(diag::expected_type_in_typealias);
+    TAD->setEndLoc(getEndOfPreviousLoc());
     Status |= UnderlyingTy;
   }
 
@@ -4038,8 +4039,8 @@ parseDeclTypeAlias(Parser::ParseDeclOptions Flags, DeclAttributes &Attributes) {
     if (EqualLoc.isInvalid()) {
       diagnose(Tok, diag::expected_equal_in_typealias);
       Status.setIsParseError();
+      return Status;
     }
-    return Status;
   }
 
   // Exit the scope introduced for the generic parameters.
