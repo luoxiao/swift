@@ -5476,6 +5476,7 @@ enum class ObjCSubscriptKind {
 class SubscriptDecl : public GenericContext, public AbstractStorageDecl {
   SourceLoc StaticLoc;
   SourceLoc ArrowLoc;
+  SourceLoc EndLoc;
   ParameterList *Indices;
   TypeLoc ElementTy;
 
@@ -5508,6 +5509,9 @@ public:
   SourceLoc getStartLoc() const {
     return getStaticLoc().isValid() ? getStaticLoc() : getSubscriptLoc();
   }
+  SourceLoc getEndLoc() const { return EndLoc; }
+
+  void setEndLoc(SourceLoc sl) { EndLoc = sl; }
   SourceRange getSourceRange() const;
   SourceRange getSignatureSourceRange() const;
 
