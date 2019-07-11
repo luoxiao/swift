@@ -150,11 +150,9 @@ public:
     // scopes in the expression, such as closures.
     // But must ignore other implicit statements, e.g. brace statments
     // if they can have no children and no stmt source range.
-    if (auto *s = n.dyn_cast<Stmt *>()) {
-      if (auto *bs = dyn_cast<BraceStmt>(s))
-        return !bs->isImplicit();
+    // Deal with it in visitBraceStmt
+    if (n.is<Stmt *>())
       return true;
-    }
 
     auto *const d = n.get<Decl *>();
     // Implicit nodes don't have source information for name lookup.
@@ -519,8 +517,8 @@ public:
 
   NullablePtr<ASTScopeImpl> visitBraceStmt(BraceStmt *bs, ASTScopeImpl *p,
                                            ScopeCreator &scopeCreator) {
-    assert(!bs->isImplicit() && bs->getSourceRange().isInvalid());
-    scopeCreator.createSubtreeIfUnique<BraceStmtScope>(p, bs);
+    if (BraceStmtScope::shouldCreateScope(bs))
+      scopeCreator.createSubtreeIfUnique<BraceStmtScope>(p, bs);
     return p;
   }
 
@@ -833,10 +831,8 @@ ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  if (decl->getBody()->isImplicit()) {
-    assert(decl->getBody()->getSourceRange().isInvalid());
+  if (!BraceStmtScope::shouldCreateScope(decl->getBody()))
     return this;
-  }
   auto *insertionPoint =
       scopeCreator.createSubtreeIfUnique<BraceStmtScope>(this, decl->getBody())
           .getPtrOr(this);
@@ -1014,12 +1010,10 @@ void CaptureListScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
 
 void ClosureBodyScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  if (closureExpr->getBody()->isImplicit()) {
-    assert(closureExpr->getBody()->getSourceRange().isInvalid());
-    return;
+  if (BraceStmtScope::shouldCreateScope(closureExpr->getBody())) {
+    scopeCreator.createSubtreeMustBeUnique<BraceStmtScope>(
+        this, closureExpr->getBody());
   }
-  scopeCreator.createSubtreeMustBeUnique<BraceStmtScope>(
-      this, closureExpr->getBody());
 }
 
 void DefaultArgumentInitializerScope::
@@ -1450,4 +1444,8 @@ ASTScopeImpl::rescueYoungestChildren(const unsigned int count) {
 
 void ASTScopeImpl::setChildrenCountWhenLastExpanded() {
   childrenCountWhenLastExpanded = getChildren().size();
+}
+
+bool BraceStmtScope::shouldCreateScope(const BraceStmt *const bs) {
+  return bs->getSourceRange().isValid();
 }

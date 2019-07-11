@@ -1674,12 +1674,11 @@ class BraceStmtScope final : public AbstractStmtScope {
 
 public:
   BraceStmt *const stmt;
-  BraceStmtScope(BraceStmt *e) : stmt(e) {
-    assert(!stmt->isImplicit() || stmt->getSourceRange().isValid());
-  }
+  BraceStmtScope(BraceStmt *e) : stmt(e) { assert(shouldCreateScope(e)); }
   virtual ~BraceStmtScope() {}
 
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
+  static bool shouldCreateScope(const BraceStmt *);
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
