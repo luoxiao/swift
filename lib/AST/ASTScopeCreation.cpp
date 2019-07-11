@@ -149,12 +149,12 @@ public:
     // Cannot ignore implicit statements because implict return can contain
     // scopes in the expression, such as closures.
     // But must ignore other implicit statements, e.g. brace statments
-    // because they can have no children and no stmt source range.
-    if (auto *s = n.dyn_cast<Stmt *>())
-      return isa<ReturnStmt>(s) || !s->isImplicit();
-
-    if (n.is<Stmt *>() || n.is<Expr *>())
+    // if they can have no children and no stmt source range.
+    if (auto *s = n.dyn_cast<Stmt *>()) {
+      if (auto *bs = dyn_cast<BraceStmt>(s))
+        return !bs->isImplicit();
       return true;
+    }
 
     auto *const d = n.get<Decl *>();
     // Implicit nodes don't have source information for name lookup.
@@ -519,6 +519,7 @@ public:
 
   NullablePtr<ASTScopeImpl> visitBraceStmt(BraceStmt *bs, ASTScopeImpl *p,
                                            ScopeCreator &scopeCreator) {
+    assert(!bs->isImplicit() && bs->getSourceRange().isInvalid());
     scopeCreator.createSubtreeIfUnique<BraceStmtScope>(p, bs);
     return p;
   }
@@ -832,8 +833,10 @@ ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  if (decl->getBody()->isImplicit())
-    return getParent().get();
+  if (decl->getBody()->isImplicit()) {
+    assert(decl->getBody()->getSourceRange().isInvalid());
+    return this;
+  }
   auto *insertionPoint =
       scopeCreator.createSubtreeIfUnique<BraceStmtScope>(this, decl->getBody())
           .getPtrOr(this);
@@ -1011,6 +1014,10 @@ void CaptureListScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
 
 void ClosureBodyScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     ScopeCreator &scopeCreator) {
+  if (closureExpr->getBody()->isImplicit()) {
+    assert(closureExpr->getBody()->getSourceRange().isInvalid());
+    return;
+  }
   scopeCreator.createSubtreeMustBeUnique<BraceStmtScope>(
       this, closureExpr->getBody());
 }
