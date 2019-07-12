@@ -3177,9 +3177,6 @@ void Parser::parseDeclDelayed() {
         // mechanism used above
         SF->Decls.push_back(D);
       }
-//      else
-//        llvm_unreachable(
-//            "ASTScope lookup needs delayed Decls to be included in parents");
     }
   });
 }
@@ -4016,7 +4013,7 @@ parseDeclTypeAlias(Parser::ParseDeclOptions Flags, DeclAttributes &Attributes) {
     }
 
     UnderlyingTy = parseType(diag::expected_type_in_typealias);
-    TAD->setEndLoc(getEndOfPreviousLoc());
+    TAD->setTypeEndLoc(PreviousLoc);
     Status |= UnderlyingTy;
   }
 
@@ -6493,7 +6490,6 @@ Parser::parseDeclSubscript(SourceLoc StaticLoc,
     SignatureHasCodeCompletion |= whereStatus.hasCodeCompletion();
     if (whereStatus.hasCodeCompletion() && !CodeCompletion) {
       // Trigger delayed parsing, no need to continue.
-      Subscript->setEndLoc(getEndOfPreviousLoc().getAdvancedLoc(-1));
       return whereStatus;
     }
   }
@@ -6528,6 +6524,9 @@ Parser::parseDeclSubscript(SourceLoc StaticLoc,
                           accessors, Subscript, StaticLoc);
   }
 
+  // Now that it's been parsed, set the end location.
+  Subscript->setEndLoc(PreviousLoc);
+
   bool Invalid = false;
   // Reject 'subscript' functions outside of type decls
   if (!(Flags & PD_HasContainerType)) {
@@ -6538,8 +6537,6 @@ Parser::parseDeclSubscript(SourceLoc StaticLoc,
   accessors.record(*this, Subscript, (Invalid || !Status.isSuccess()),
                    Flags, StaticLoc, Attributes,
                    ElementTy.get(), Indices.get(), Decls);
-
-  Subscript->setEndLoc(getEndOfPreviousLoc().getAdvancedLoc(-1));
 
   // No need to setLocalDiscriminator because subscripts cannot
   // validly appear outside of type decls.
