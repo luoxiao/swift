@@ -708,7 +708,7 @@ public:
   void expandBody(ScopeCreator &) override;
 
 private:
-  std::vector<Decl *> getExplicitMembersInSourceOrder(ScopeCreator &) const;
+  std::vector<Decl *> getMembersInSourceOrder(ScopeCreator &) const;
   void beCurrent() override;
   bool isObsolete() const override;
 

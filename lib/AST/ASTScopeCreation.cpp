@@ -1243,7 +1243,7 @@ void AbstractFunctionBodyScope::expandBody(ScopeCreator &scopeCreator) {
 void GenericTypeOrExtensionScope::expandBody(ScopeCreator &) {}
 
 void IterableTypeScope::expandBody(ScopeCreator &scopeCreator) {
-  for (auto n : getExplicitMembersInSourceOrder(scopeCreator))
+  for (auto n : getMembersInSourceOrder(scopeCreator))
     scopeCreator.createScopeFor(n, this);
   explicitMemberCount =
       getIterableDeclContext().get()->getExplicitMemberCount();
@@ -1285,7 +1285,7 @@ static bool patternPreceedsVar(const Decl *d1, const Decl *d2,
   return !vd || !pbd || vd->getParentPatternBinding() != pbd;
 }
 
-std::vector<Decl *> IterableTypeScope::getExplicitMembersInSourceOrder(
+std::vector<Decl *> IterableTypeScope::getMembersInSourceOrder(
     ScopeCreator &scopeCreator) const {
   std::vector<Decl *> sortedMembers;
   for (auto *d : getIterableDeclContext().get()->getMembers())
