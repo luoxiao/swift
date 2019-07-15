@@ -1299,6 +1299,15 @@ static bool patternPreceedsVar(const Decl *d1, const Decl *d2,
   return !vd || !pbd || vd->getParentPatternBinding() != pbd;
 }
 
+static bool isVarDeclInPatternBindingDecl(const Decl *const d1,
+                                          const Decl *const d2) {
+  if (auto *vd = dyn_cast<VarDecl>(d1)) {
+    if (auto *pbd = dyn_cast<PatternBindingDecl>(d2))
+      return vd->getParentPatternBinding() == pbd;
+  }
+  return false;
+}
+
 std::vector<Decl *> IterableTypeScope::getMembersInSourceOrder(
     ScopeCreator &scopeCreator) const {
   std::vector<Decl *> sortedMembers;
@@ -1310,6 +1319,15 @@ std::vector<Decl *> IterableTypeScope::getMembersInSourceOrder(
   auto cmp = [&](const Decl *d1, const Decl *d2) {
     // In general, we sort by start location so the the child scopes
     // are created in source order.
+    // However, any VarDecls must come after the corresponding
+    // PatternBindingDecls so that those VarDecls get processed without the PBDs
+    // and are not rejected as duplicates.
+    if (d1->getStartLoc() == d2->getStartLoc()) {
+      if (isVarDeclInPatternBindingDecl(d1, d2))
+        return false; // d2 comes first
+      return true;    // d1 comes first
+    }
+
     const bool comesBefore =
         SM.isBeforeInBuffer(d1->getStartLoc(), d2->getStartLoc());
     assert(patternPreceedsVar(d1, d2, comesBefore) &&
