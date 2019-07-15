@@ -35,7 +35,10 @@ using namespace ast_scope;
 
 static SourceLoc getStartOfFirstParam(ClosureExpr *closure);
 
-
+/// Todo: Remove once rdar://53080185 is fixed
+static SourceRange correct(const SourceRange r, SourceManager &SM) {
+  return SM.isBeforeInBuffer(r.End, r.Start) ? SourceRange(r.End, r.Start) : r;
+}
 
 SourceRange ASTScopeImpl::widenSourceRangeForIgnoredASTNodes(
     const SourceRange range) const {
@@ -198,12 +201,13 @@ SourceRange DefaultArgumentInitializerScope::getChildlessSourceRange(
 
 SourceRange PatternEntryDeclScope::getChildlessSourceRange(
     const bool omitAssertions) const {
-  return getPatternEntry().getSourceRange();
+  return correct(getPatternEntry().getSourceRange(), getSourceManager());
 }
 
 SourceRange PatternEntryInitializerScope::getChildlessSourceRange(
     const bool omitAssertions) const {
-  return getPatternEntry().getInitAsWritten()->getSourceRange();
+  return correct(getPatternEntry().getInitAsWritten()->getSourceRange(),
+                 getSourceManager());
 }
 
 SourceRange

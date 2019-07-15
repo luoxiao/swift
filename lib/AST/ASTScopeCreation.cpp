@@ -163,9 +163,14 @@ public:
     /// \code
     /// class SR10903 { static var _: Int { 0 } }
     /// \endcode
-    if (const auto *PBD = dyn_cast<PatternBindingDecl>(d))
-      if (PBD->isInvalid())
-        return false;
+
+    // Commented out for
+    // validation-test/compiler_crashers_fixed/27962-swift-rebindselfinconstructorexpr-getcalledconstructor.swift
+    // In that test the invalid PBD -> var decl which contains the desired
+    // closure scope
+    //    if (const auto *PBD = dyn_cast<PatternBindingDecl>(d))
+    //      if (PBD->isInvalid())
+    //        return false;
     /// In
     /// \code
     /// @propertyWrapper
@@ -185,6 +190,15 @@ public:
     /// I'm seeing a dumped AST include:
     /// (pattern_binding_decl range=[test.swift:13:8 - line:12:29]
     const auto &SM = d->getASTContext().SourceMgr;
+
+    // TODO: Once rdar://53080185 is fixed, remove this.
+    if (isa<PatternBindingDecl>(d))
+      return true;
+
+    // Once we allow invalid PatternBindingDecls (see shouldCreateScope),
+    // then IDE/complete_property_delegate_attribute.swift fails because
+    // we try to expand a member whose source range is backwards.
+
     assert((d->getStartLoc().isInvalid() ||
             !SM.isBeforeInBuffer(d->getEndLoc(), d->getStartLoc())) &&
            "end-before-start will break tree search via location");
@@ -1289,7 +1303,7 @@ std::vector<Decl *> IterableTypeScope::getMembersInSourceOrder(
     ScopeCreator &scopeCreator) const {
   std::vector<Decl *> sortedMembers;
   for (auto *d : getIterableDeclContext().get()->getMembers())
-    if (!d->isImplicit())
+    if (d->getSourceRange().isValid())
       sortedMembers.push_back(d);
 
   const auto &SM = getSourceManager();
