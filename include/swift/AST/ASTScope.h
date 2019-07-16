@@ -298,7 +298,7 @@ public:
   /// Return the scope into which to place subsequent decls
   ASTScopeImpl *expandAndBeCurrent(ScopeCreator &);
 
-private:
+protected:
   virtual ASTScopeImpl *expandSpecifically(ScopeCreator &) = 0;
   virtual void beCurrent();
   virtual bool isObsolete() const;
@@ -496,6 +496,7 @@ public:
   const SourceFile *getSourceFile() const override;
   NullablePtr<const void> addressForPrinting() const override { return SF; }
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
   ScopeCreator &getScopeCreator() override;
@@ -636,8 +637,10 @@ public:
   }
   virtual bool shouldHaveABody() const { return false; }
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
+public:
   virtual void expandBody(ScopeCreator &);
 
   virtual Decl *getDecl() const = 0;
@@ -711,6 +714,8 @@ public:
 
 private:
   std::vector<Decl *> getMembersInSourceOrder(ScopeCreator &) const;
+
+protected:
   void beCurrent() override;
   bool isObsolete() const override;
 
@@ -823,9 +828,8 @@ public:
   SourceRange
   getChildlessSourceRange(bool omitAssertions = false) const override;
 
-  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
-
 protected:
+  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
   void printSpecifics(llvm::raw_ostream &out) const override;
 
 public:
@@ -851,6 +855,7 @@ public:
   AbstractFunctionDeclScope(AbstractFunctionDecl *e) : decl(e) {}
   virtual ~AbstractFunctionDeclScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -902,6 +907,7 @@ public:
       : params(params), matchingContext(matchingContext) {}
   virtual ~AbstractFunctionParamsScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -931,13 +937,14 @@ public:
   AbstractFunctionBodyScope(AbstractFunctionDecl *e) : decl(e) {}
   virtual ~AbstractFunctionBodyScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
+  void beCurrent() override;
+  bool isObsolete() const override;
 
 private:
   void expandAScopeThatDoesNotCreateANewInsertionPoint(ScopeCreator &);
   void expandBody(ScopeCreator &);
-  void beCurrent() override;
-  bool isObsolete() const override;
 
 public:
   SourceRange
@@ -987,7 +994,10 @@ public:
   DefaultArgumentInitializerScope(ParamDecl *e) : decl(e) {}
   ~DefaultArgumentInitializerScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
+
+public:
   void expandAScopeThatDoesNotCreateANewInsertionPoint(ScopeCreator &);
   std::string getClassName() const override;
   SourceRange
@@ -1027,7 +1037,10 @@ public:
   }
   virtual ~AttachedPropertyWrapperScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
+
+public:
   std::string getClassName() const override;
   SourceRange
   getChildlessSourceRange(bool omitAssertions = false) const override;
@@ -1085,13 +1098,18 @@ public:
 };
 
 class PatternEntryDeclScope final : public AbstractPatternEntryScope {
+  const Expr *initWhenLastExpanded;
+
 public:
   PatternEntryDeclScope(PatternBindingDecl *pbDecl, unsigned entryIndex,
                         DeclVisibilityKind vis)
       : AbstractPatternEntryScope(pbDecl, entryIndex, vis) {}
   virtual ~PatternEntryDeclScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
+  void beCurrent() override;
+  bool isObsolete() const override;
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
@@ -1116,6 +1134,7 @@ public:
       : AbstractPatternEntryScope(pbDecl, entryIndex, vis) {}
   virtual ~PatternEntryInitializerScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1153,6 +1172,7 @@ public:
 
   virtual ~ConditionalClauseScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1189,9 +1209,8 @@ public:
   getChildlessSourceRange(bool omitAssertions = false) const override;
   std::string getClassName() const override;
 
-  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
-
 protected:
+  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
                              DeclConsumer) const override;
   void printSpecifics(llvm::raw_ostream &out) const override;
@@ -1207,6 +1226,7 @@ public:
   CaptureListScope(CaptureListExpr *e) : expr(e) {}
   virtual ~CaptureListScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1245,13 +1265,18 @@ public:
 };
 
 class WholeClosureScope final : public AbstractClosureScope {
+  const BraceStmt *bodyWhenLastExpanded;
+
 public:
   WholeClosureScope(ClosureExpr *closureExpr,
                     NullablePtr<CaptureListExpr> captureList)
       : AbstractClosureScope(closureExpr, captureList) {}
   virtual ~WholeClosureScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
+  void beCurrent() override;
+  bool isObsolete() const override;
 
 private:
   void expandAScopeThatDoesNotCreateANewInsertionPoint(ScopeCreator &);
@@ -1278,9 +1303,8 @@ public:
   SourceRange
   getChildlessSourceRange(bool omitAssertions = false) const override;
 
-  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
-
 protected:
+  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
                              DeclConsumer) const override;
   Optional<bool> resolveIsCascadingUseForThisScope(
@@ -1296,6 +1320,7 @@ public:
       : AbstractClosureScope(closureExpr, captureList) {}
   virtual ~ClosureBodyScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1319,13 +1344,14 @@ public:
   TopLevelCodeScope(TopLevelCodeDecl *e) : decl(e) {}
   virtual ~TopLevelCodeScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
+  void beCurrent() override;
+  bool isObsolete() const override;
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
   std::vector<ASTScopeImpl *> rescueBodyScopesToReuse();
-  void beCurrent() override;
-  bool isObsolete() const override;
 
 public:
   std::string getClassName() const override;
@@ -1361,8 +1387,6 @@ public:
     return specializeAttr;
   }
 
-  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
-
   NullablePtr<AbstractStorageDecl>
   getEnclosingAbstractStorageDecl() const override;
 
@@ -1372,6 +1396,7 @@ public:
   NullablePtr<const void> getReferrent() const override;
 
 protected:
+  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
   bool lookupLocalsOrMembers(ArrayRef<const ASTScopeImpl *>,
                              DeclConsumer) const override;
 };
@@ -1383,6 +1408,7 @@ public:
   SubscriptDeclScope(SubscriptDecl *e) : decl(e) {}
   virtual ~SubscriptDeclScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1424,6 +1450,7 @@ public:
   VarDeclScope(VarDecl *e) : decl(e) {}
   virtual ~VarDeclScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1478,6 +1505,7 @@ public:
   IfStmtScope(IfStmt *e) : stmt(e) {}
   virtual ~IfStmtScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1494,6 +1522,7 @@ public:
   WhileStmtScope(WhileStmt *e) : stmt(e) {}
   virtual ~WhileStmtScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1510,6 +1539,7 @@ public:
   GuardStmtScope(GuardStmt *e) : stmt(e) {}
   virtual ~GuardStmtScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1539,9 +1569,9 @@ public:
   SourceRange
   getChildlessSourceRange(bool omitAssertions = false) const override;
   std::string getClassName() const override;
-  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
 
 protected:
+  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
   NullablePtr<const ASTScopeImpl> getLookupParent() const override {
     return lookupParent;
   }
@@ -1553,6 +1583,7 @@ public:
   RepeatWhileScope(RepeatWhileStmt *e) : stmt(e) {}
   virtual ~RepeatWhileScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1569,6 +1600,7 @@ public:
   DoCatchStmtScope(DoCatchStmt *e) : stmt(e) {}
   virtual ~DoCatchStmtScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1585,6 +1617,7 @@ public:
   SwitchStmtScope(SwitchStmt *e) : stmt(e) {}
   virtual ~SwitchStmtScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1601,6 +1634,7 @@ public:
   ForEachStmtScope(ForEachStmt *e) : stmt(e) {}
   virtual ~ForEachStmtScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1617,6 +1651,7 @@ public:
   ForEachPatternScope(ForEachStmt *e) : stmt(e) {}
   virtual ~ForEachPatternScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1638,6 +1673,7 @@ public:
   CatchStmtScope(CatchStmt *e) : stmt(e) {}
   virtual ~CatchStmtScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1660,6 +1696,7 @@ public:
   CaseStmtScope(CaseStmt *e) : stmt(e) {}
   virtual ~CaseStmtScope() {}
 
+protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
@@ -1683,8 +1720,10 @@ public:
   BraceStmtScope(BraceStmt *e) : stmt(e) { assert(shouldCreateScope(e)); }
   virtual ~BraceStmtScope() {}
 
-  ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
   static bool shouldCreateScope(const BraceStmt *);
+
+protected:
+  ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);

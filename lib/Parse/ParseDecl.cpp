@@ -3172,6 +3172,20 @@ void Parser::parseDeclDelayed() {
         NTD->addMember(D);
       } else if (auto *ED = dyn_cast<ExtensionDecl>(parent)) {
         ED->addMember(D);
+      } else if (auto *ace = dyn_cast<ClosureExpr>(parent)) {
+        auto *body = ace->getBody();
+
+        // TODO: factor with similar code in
+        // TypeChecker::typeCheckConstructorBodyUntil
+        SmallVector<ASTNode, 8> Elts(body->getElements().begin(),
+                                     body->getElements().end());
+
+        Elts.push_back(ASTNode(D));
+
+        auto *newBody =
+            BraceStmt::create(Context, body->getLBraceLoc(), Elts,
+                              body->getRBraceLoc(), body->isImplicit());
+        ace->setBody(newBody, false);
       } else if (auto *SF = dyn_cast<SourceFile>(parent)) {
         // FIXME: unify notification to ASTSourceFileScope with addMember
         // mechanism used above
@@ -5313,13 +5327,14 @@ Parser::parseDeclVar(ParseDeclOptions Flags,
       PBDEntries.back().setEqualLoc(EqualLoc);
 
       ParserResult<Expr> init = parseExpr(diag::expected_init_value);
-      
+
       // If this Pattern binding was not supposed to have an initializer, but it
-      // did, diagnose this and remove it.
-      if (Flags & PD_DisallowInit && init.isNonNull()) {
+      // did, diagnose this.
+      // Do not remove it, because ASTScope system needs to find the initializer
+      // in the PatternBindingDecl in order to find scopes for closures in
+      // the initializer.
+      if (Flags & PD_DisallowInit && init.isNonNull())
         diagnose(EqualLoc, diag::disallowed_init);
-        init = nullptr;
-      }
       
       // Otherwise, if this pattern binding *was* supposed (or allowed) to have
       // an initializer, but it was a parse error, replace it with ErrorExpr so

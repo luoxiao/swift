@@ -1424,6 +1424,20 @@ bool TopLevelCodeScope::isObsolete() const {
   return bodyWhenLastExpanded != decl->getBody();
 }
 
+void PatternEntryDeclScope::beCurrent() {
+  initWhenLastExpanded = getPatternEntry().getInitAsWritten();
+}
+bool PatternEntryDeclScope::isObsolete() const {
+  return initWhenLastExpanded == getPatternEntry().getInitAsWritten();
+}
+
+void WholeClosureScope::beCurrent() {
+  bodyWhenLastExpanded = closureExpr->getBody();
+}
+bool WholeClosureScope::isObsolete() const {
+  return bodyWhenLastExpanded == closureExpr->getBody();
+}
+
 std::vector<ASTScopeImpl *> ASTScopeImpl::rescueScopesToReuse() {
   return rescueYoungestChildren(getChildren().size() -
                                 childrenCountWhenLastExpanded);
