@@ -317,8 +317,8 @@ public:
     return s;
   }
 
-  void addChildrenForAllExplicitAccessors(AbstractStorageDecl *asd,
-                                          ASTScopeImpl *parent);
+  void addChildrenForAllLocalizableAccessors(AbstractStorageDecl *asd,
+                                             ASTScopeImpl *parent);
 
   void
   forEachSpecializeAttrInSourceOrder(Decl *declBeingSpecialized,
@@ -648,10 +648,10 @@ NullablePtr<ASTScopeImpl> ScopeCreator::createScopeFor(ASTNode n,
   return ASTVisitorForScopeCreation().visit(p, parent, *this);
 }
 
-void ScopeCreator::addChildrenForAllExplicitAccessors(AbstractStorageDecl *asd,
-                                                      ASTScopeImpl *parent) {
   for (auto accessor : asd->getAllAccessors()) {
     if (!accessor->isImplicit() && accessor->getStartLoc().isValid()) {
+void ScopeCreator::addChildrenForAllLocalizableAccessors(
+    AbstractStorageDecl *asd, ASTScopeImpl *parent) {
       // Accessors are always nested within their abstract storage
       // declaration. The nesting may not be immediate, because subscripts may
       // have intervening scopes for generics.
@@ -792,7 +792,7 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
     initializerEnd = initializer->getSourceRange().End;
   }
   // Add accessors for the variables in this pattern.
-  forEachVarDeclWithExplicitAccessors(scopeCreator, [&](VarDecl *var) {
+  forEachVarDeclWithLocalizableAccessors(scopeCreator, [&](VarDecl *var) {
     scopeCreator.createSubtreeIfUnique<VarDeclScope>(this, var);
   });
 
@@ -999,7 +999,7 @@ void CaseStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
 
 void VarDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  scopeCreator.addChildrenForAllExplicitAccessors(decl, this);
+  scopeCreator.addChildrenForAllLocalizableAccessors(decl, this);
 }
 
 void SubscriptDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
@@ -1009,7 +1009,7 @@ void SubscriptDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
       scopeCreator.createGenericParamScopes(sub, sub->getGenericParams(), this);
   auto *params = scopeCreator.createSubtree<AbstractFunctionParamsScope>(
       leaf, sub->getIndices(), sub->getGetter());
-  scopeCreator.addChildrenForAllExplicitAccessors(sub, params);
+  scopeCreator.addChildrenForAllLocalizableAccessors(sub, params);
 }
 
 void WholeClosureScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
@@ -1154,7 +1154,7 @@ AbstractPatternEntryScope::AbstractPatternEntryScope(
          "out of bounds");
 }
 
-void AbstractPatternEntryScope::forEachVarDeclWithExplicitAccessors(
+void AbstractPatternEntryScope::forEachVarDeclWithLocalizableAccessors(
     ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const {
   getPatternEntry().getPattern()->forEachVariable([&](VarDecl *var) {
     const bool hasAccessors = var->getBracesRange().isValid();

@@ -1088,7 +1088,7 @@ public:
 
 protected:
   void printSpecifics(llvm::raw_ostream &out) const override;
-  void forEachVarDeclWithExplicitAccessors(
+  void forEachVarDeclWithLocalizableAccessors(
       ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const;
 
 public:
