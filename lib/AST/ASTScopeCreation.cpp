@@ -1266,7 +1266,7 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator) {
 #pragma mark - reexpandIfObsolete
 
 void ASTScopeImpl::reexpandIfObsolete(ScopeCreator &scopeCreator) {
-  if (isObsolete())
+  if (!isCurrent())
     reexpand(scopeCreator);
 }
 
@@ -1387,54 +1387,54 @@ const Decl *GenericTypeOrExtensionWholePortion::getReferrentOfScope(
 
 #pragma mark currency
 void ASTScopeImpl::beCurrent() {}
-bool ASTScopeImpl::isObsolete() const { return false; }
+bool ASTScopeImpl::isCurrent() const { return true; }
 
 void IterableTypeScope::beCurrent() { portion->beCurrent(this); }
-bool IterableTypeScope::isObsolete() const { return portion->isObsolete(this); }
+bool IterableTypeScope::isCurrent() const { return portion->isCurrent(this); }
 
 void Portion::beCurrent(IterableTypeScope *) const {}
-bool Portion::isObsolete(const IterableTypeScope *) const { return false; }
+bool Portion::isCurrent(const IterableTypeScope *) const { return true; }
 
 void IterableTypeBodyPortion::beCurrent(IterableTypeScope *s) const {
   s->makeBodyCurrent();
 }
-bool IterableTypeBodyPortion::isObsolete(const IterableTypeScope *s) const {
-  return s->isBodyObsolete();
+bool IterableTypeBodyPortion::isCurrent(const IterableTypeScope *s) const {
+  return s->isBodyCurrent();
 }
 
 void IterableTypeScope::makeBodyCurrent() {
   explicitMemberCount =
       getIterableDeclContext().get()->getExplicitMemberCount();
 }
-bool IterableTypeScope::isBodyObsolete() const {
-  return explicitMemberCount !=
+bool IterableTypeScope::isBodyCurrent() const {
+  return explicitMemberCount ==
          getIterableDeclContext().get()->getExplicitMemberCount();
 }
 
 void AbstractFunctionBodyScope::beCurrent() {
   bodyWhenLastExpanded = decl->getBody();
 }
-bool AbstractFunctionBodyScope::isObsolete() const {
-  return bodyWhenLastExpanded != decl->getBody();
+bool AbstractFunctionBodyScope::isCurrent() const {
+  return bodyWhenLastExpanded == decl->getBody();
   ;
 }
 
 void TopLevelCodeScope::beCurrent() { bodyWhenLastExpanded = decl->getBody(); }
-bool TopLevelCodeScope::isObsolete() const {
-  return bodyWhenLastExpanded != decl->getBody();
+bool TopLevelCodeScope::isCurrent() const {
+  return bodyWhenLastExpanded == decl->getBody();
 }
 
 void PatternEntryDeclScope::beCurrent() {
   initWhenLastExpanded = getPatternEntry().getInitAsWritten();
 }
-bool PatternEntryDeclScope::isObsolete() const {
+bool PatternEntryDeclScope::isCurrent() const {
   return initWhenLastExpanded == getPatternEntry().getInitAsWritten();
 }
 
 void WholeClosureScope::beCurrent() {
   bodyWhenLastExpanded = closureExpr->getBody();
 }
-bool WholeClosureScope::isObsolete() const {
+bool WholeClosureScope::isCurrent() const {
   return bodyWhenLastExpanded == closureExpr->getBody();
 }
 

@@ -301,7 +301,7 @@ public:
 protected:
   virtual ASTScopeImpl *expandSpecifically(ScopeCreator &) = 0;
   virtual void beCurrent();
-  virtual bool isObsolete() const;
+  virtual bool isCurrent() const;
 
 public:
   // Some nodes (VarDecls and Accessors) are created directly from
@@ -545,7 +545,7 @@ public:
   getReferrentOfScope(const GenericTypeOrExtensionScope *s) const;
 
   virtual void beCurrent(IterableTypeScope *) const;
-  virtual bool isObsolete(const IterableTypeScope *) const;
+  virtual bool isCurrent(const IterableTypeScope *) const;
   };
 
   // For the whole Decl scope of a GenericType or an Extension
@@ -620,7 +620,7 @@ public:
                                         bool omitAssertions) const override;
 
   void beCurrent(IterableTypeScope *) const override;
-  bool isObsolete(const IterableTypeScope *) const override;
+  bool isCurrent(const IterableTypeScope *) const override;
 };
 
 /// GenericType or Extension scope
@@ -717,11 +717,11 @@ private:
 
 protected:
   void beCurrent() override;
-  bool isObsolete() const override;
+  bool isCurrent() const override;
 
 public:
   void makeBodyCurrent();
-  bool isBodyObsolete() const;
+  bool isBodyCurrent() const;
 };
 
 class NominalTypeScope final : public IterableTypeScope {
@@ -940,7 +940,7 @@ public:
 protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
   void beCurrent() override;
-  bool isObsolete() const override;
+  bool isCurrent() const override;
 
 private:
   void expandAScopeThatDoesNotCreateANewInsertionPoint(ScopeCreator &);
@@ -1109,7 +1109,7 @@ public:
 protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
   void beCurrent() override;
-  bool isObsolete() const override;
+  bool isCurrent() const override;
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
@@ -1276,7 +1276,7 @@ public:
 protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
   void beCurrent() override;
-  bool isObsolete() const override;
+  bool isCurrent() const override;
 
 private:
   void expandAScopeThatDoesNotCreateANewInsertionPoint(ScopeCreator &);
@@ -1347,7 +1347,7 @@ public:
 protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
   void beCurrent() override;
-  bool isObsolete() const override;
+  bool isCurrent() const override;
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
