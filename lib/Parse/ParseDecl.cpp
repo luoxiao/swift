@@ -5330,12 +5330,14 @@ Parser::parseDeclVar(ParseDeclOptions Flags,
 
       // If this Pattern binding was not supposed to have an initializer, but it
       // did, diagnose this.
-      // Do not remove it, because ASTScope system needs to find the initializer
-      // in the PatternBindingDecl in order to find scopes for closures in
-      // the initializer.
-      if (Flags & PD_DisallowInit && init.isNonNull())
+      // FIXME; Someday, do not remove it, because ASTScope system needs to find
+      // the initializer in the PatternBindingDecl in order to find scopes for
+      // closures in the initializer.
+      if (Flags & PD_DisallowInit && init.isNonNull()) {
         diagnose(EqualLoc, diag::disallowed_init);
-      
+        init = nullptr;
+      }
+
       // Otherwise, if this pattern binding *was* supposed (or allowed) to have
       // an initializer, but it was a parse error, replace it with ErrorExpr so
       // that downstream clients know that it was present (well, at least the =
