@@ -124,9 +124,9 @@ public:
   /// Return the resultant insertionPoint
   /// Use a template in order to be able to pass in either an array of ASTNodes
   /// or an array of Decl*s.
-  template <typename NodeType>
+  template <typename ArrayOfNodesOrDeclPtrs>
   ASTScopeImpl *addScopesToTree(ASTScopeImpl *const insertionPoint,
-                                ArrayRef<NodeType> nodesOrDeclsToAdd) {
+                                ArrayOfNodesOrDeclPtrs nodesOrDeclsToAdd) {
     auto *ip = insertionPoint;
     for (auto nd : nodesOrDeclsToAdd) {
       if (shouldThisNodeBeScopedWhenEncountered(nd))
@@ -840,7 +840,15 @@ GenericTypeOrExtensionScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  return scopeCreator.addScopesToTree(this, stmt->getElements());
+  // TODO: remove the sort after performing rdar://53254395
+  llvm::SmallVector<ASTNode, 0> sortedElements{stmt->getElements().begin(),
+                                               stmt->getElements().end()};
+  SourceManager &SM = getSourceManager();
+  std::stable_sort(sortedElements.begin(), sortedElements.end(),
+                   [&](ASTNode n1, ASTNode n2) {
+                     return SM.isBeforeInBuffer(n1.getEndLoc(), n2.getEndLoc());
+                   });
+  return scopeCreator.addScopesToTree(this, sortedElements);
 }
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
