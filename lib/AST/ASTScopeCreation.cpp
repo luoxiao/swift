@@ -34,6 +34,13 @@
 using namespace swift;
 using namespace ast_scope;
 
+
+template <typename T>
+static bool isLocalizable(const T& astElement) {
+  return astElement.getStartLoc().isValid();
+}
+
+
 namespace swift {
 namespace ast_scope {
 
@@ -778,7 +785,7 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
   // so compute it ourselves.
   SourceLoc initializerEnd;
   if (patternEntry.getInitAsWritten() &&
-      patternEntry.getInitAsWritten()->getSourceRange().isValid()) {
+      isLocalizable(*patternEntry.getInitAsWritten())) {
     auto *initializer =
         scopeCreator.createSubtree<PatternEntryInitializerScope>(
             this, decl, patternEntryIndex, vis);
@@ -1320,7 +1327,7 @@ std::vector<Decl *> IterableTypeScope::getMembersInSourceOrder(
     ScopeCreator &scopeCreator) const {
   std::vector<Decl *> sortedMembers;
   for (auto *d : getIterableDeclContext().get()->getMembers())
-    if (d->getSourceRange().isValid())
+    if (isLocalizable(*d))
       sortedMembers.push_back(d);
 
   const auto &SM = getSourceManager();
@@ -1501,5 +1508,5 @@ void ASTScopeImpl::setChildrenCountWhenLastExpanded() {
 }
 
 bool BraceStmtScope::shouldCreateScope(const BraceStmt *const bs) {
-  return bs->getSourceRange().isValid();
+  return isLocalizable(*bs);
 }
