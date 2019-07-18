@@ -1099,7 +1099,7 @@ public:
 
 class PatternEntryDeclScope final : public AbstractPatternEntryScope {
   const Expr *initWhenLastExpanded;
-
+  unsigned varCountWhenLastExpanded = 0;
 public:
   PatternEntryDeclScope(PatternBindingDecl *pbDecl, unsigned entryIndex,
                         DeclVisibilityKind vis)

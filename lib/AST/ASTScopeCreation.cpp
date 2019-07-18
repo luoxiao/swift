@@ -1441,9 +1441,18 @@ bool TopLevelCodeScope::isCurrent() const {
 
 void PatternEntryDeclScope::beCurrent() {
   initWhenLastExpanded = getPatternEntry().getInitAsWritten();
+  unsigned varCount = 0;
+  getPatternEntry().getPattern()->forEachVariable(
+      [&](VarDecl *) { ++varCount; });
+  varCountWhenLastExpanded = 0;
 }
 bool PatternEntryDeclScope::isCurrent() const {
-  return initWhenLastExpanded == getPatternEntry().getInitAsWritten();
+  if (initWhenLastExpanded != getPatternEntry().getInitAsWritten())
+   return false;
+  unsigned varCount = 0;
+  getPatternEntry().getPattern()->forEachVariable(
+      [&](VarDecl *) { ++varCount; });
+  return varCount == varCountWhenLastExpanded;
 }
 
 void WholeClosureScope::beCurrent() {
