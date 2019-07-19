@@ -1168,7 +1168,8 @@ AbstractPatternEntryScope::AbstractPatternEntryScope(
 void AbstractPatternEntryScope::forEachVarDeclWithLocalizableAccessors(
     ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const {
   getPatternEntry().getPattern()->forEachVariable([&](VarDecl *var) {
-    if (var->hasAnyAccessors())
+    if (llvm::any_of(var->getAllAccessors(),
+        [&](AccessorDecl *ad) { return isLocalizable(*ad); }))
       foundOne(var);
   });
 }

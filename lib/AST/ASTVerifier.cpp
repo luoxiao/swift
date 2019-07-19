@@ -2421,6 +2421,13 @@ public:
           abort();
         }
       }
+//      if (auto *VD = dyn_cast<VarDecl>(ASD->getStorage())) {
+//        const bool foundIt =
+//            llvm::any_of(vd->getAllAccessors(),
+//                         [&](AccessorDecl *VDA) { return VDA == ASD; });
+//        Out << "Accessor for a VarDecl must be listed in its accessors";
+//        abort();
+//      }
 
       verifyCheckedBase(ASD);
     }
