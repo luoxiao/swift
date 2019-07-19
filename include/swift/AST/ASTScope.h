@@ -885,7 +885,7 @@ protected:
   getSourceRangeOfEnclosedParams(bool omitAssertions) const override;
 
 private:
-  SourceLoc getParamsSourceLoc() const;
+  static SourceLoc getParamsSourceLoc(AbstractFunctionDecl*);
 
 protected:
   NullablePtr<const GenericParamList> genericParams() const override;

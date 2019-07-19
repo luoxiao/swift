@@ -892,7 +892,7 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   if (!isa<AccessorDecl>(decl)) {
     leaf = scopeCreator.createGenericParamScopes(decl, decl->getGenericParams(),
                                                  leaf);
-    if (!decl->isImplicit()) {
+    if (!decl->isImplicit() && getParamsSourceLoc(decl).isValid()) {
       leaf = scopeCreator.createSubtree<AbstractFunctionParamsScope>(
           leaf, decl->getParameters(), nullptr);
     }

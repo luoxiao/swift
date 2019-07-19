@@ -551,11 +551,12 @@ SourceRange SubscriptDeclScope::getSourceRangeOfEnclosedParams(
 
 SourceRange AbstractFunctionDeclScope::getSourceRangeOfEnclosedParams(
     const bool omitAssertions) const {
-  return SourceRange(getParamsSourceLoc(),
-                     getChildlessSourceRange(omitAssertions).End);
+  const auto s = getParamsSourceLoc(decl);
+  const auto e = getChildlessSourceRange(omitAssertions).End;
+  return s.isInvalid() || e.isInvalid() ? SourceRange() : SourceRange(s, e);
 }
 
-SourceLoc AbstractFunctionDeclScope::getParamsSourceLoc() const {
+SourceLoc AbstractFunctionDeclScope::getParamsSourceLoc(AbstractFunctionDecl *decl) {
   if (auto *c = dyn_cast<ConstructorDecl>(decl))
     return c->getParameters()->getLParenLoc();
 
