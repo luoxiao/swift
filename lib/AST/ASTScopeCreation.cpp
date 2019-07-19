@@ -162,8 +162,8 @@ public:
       return true;
 
     auto *const d = n.get<Decl *>();
-    // Implicit nodes don't have source information for name lookup.
-    if (d->isImplicit())
+    // Implicit nodes may not have source information for name lookup.
+    if (!isLocalizable(d))
       return false;
     /// In \c Parser::parseDeclVarGetSet fake PBDs are created. Ignore them.
     /// Example:
@@ -905,7 +905,7 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   if (!isa<AccessorDecl>(decl)) {
     leaf = scopeCreator.createGenericParamScopes(decl, decl->getGenericParams(),
                                                  leaf);
-    if (!decl->isImplicit() && getParamsSourceLoc(decl).isValid()) {
+    if (isLocalizable(decl) && getParamsSourceLoc(decl).isValid()) {
       leaf = scopeCreator.createSubtree<AbstractFunctionParamsScope>(
           leaf, decl->getParameters(), nullptr);
     }
@@ -967,7 +967,7 @@ void SwitchStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
                                          scopeCreator);
 
   for (auto caseStmt : stmt->getCases()) {
-    if (!caseStmt->isImplicit())
+    if (isLocalizable(caseStmt))
       scopeCreator.createSubtreeIfUnique<CaseStmtScope>(this, caseStmt);
   }
 }
@@ -982,7 +982,7 @@ void ForEachStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   //    let v: C { for b : Int -> S((array: P { }
   // the body is implicit and it would overlap the source range of the expr
   // above.
-  if (!stmt->getBody()->isImplicit())
+  if (isLocalizable(stmt->getBody()))
     scopeCreator.createSubtree<ForEachPatternScope>(this, stmt);
 }
 
@@ -1535,5 +1535,5 @@ bool BraceStmtScope::shouldCreateScope(const BraceStmt *const bs) {
 
 bool AbstractFunctionDeclScope::shouldCreateAccessorScope(
     const AccessorDecl *const ad) {
-  return !ad->isImplicit() && isLocalizable(*ad);
+  return isLocalizable(*ad);
 }
