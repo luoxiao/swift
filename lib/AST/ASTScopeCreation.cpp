@@ -651,15 +651,15 @@ NullablePtr<ASTScopeImpl> ScopeCreator::createScopeFor(ASTNode n,
 void ScopeCreator::addChildrenForAllLocalizableAccessors(
     AbstractStorageDecl *asd, ASTScopeImpl *parent) {
   for (auto *accessor : asd->getAllAccessors()) {
-    if (!accessor->isImplicit() && isLocalizable(*accessor)) {
-      // Accessors are always nested within their abstract storage
-      // declaration. The nesting may not be immediate, because subscripts may
-      // have intervening scopes for generics.
-      if (parent->getEnclosingAbstractStorageDecl() == accessor->getStorage())
-        ASTVisitorForScopeCreation().visitAbstractFunctionDecl(accessor, parent,
-                                                               *this);
+    if (!AbstractFunctionDeclScope::shouldCreateAccessorScope(accessor))
+      continue;
+    // Accessors are always nested within their abstract storage
+    // declaration. The nesting may not be immediate, because subscripts may
+    // have intervening scopes for generics.
+    if (parent->getEnclosingAbstractStorageDecl() == accessor->getStorage())
+      ASTVisitorForScopeCreation().visitAbstractFunctionDecl(accessor, parent,
+                                                             *this);
     }
-  }
 }
 
 #pragma mark creation helpers
@@ -715,6 +715,8 @@ ASTScopeImpl *ASTScopeImpl::expandAndBeCurrent(ScopeCreator &scopeCreator) {
   auto *insertionPoint = expandSpecifically(scopeCreator);
   beCurrent();
   setChildrenCountWhenLastExpanded();
+  assert((getChildlessSourceRange().isValid() || !getChildren().empty()) &&
+         "need to be able to find source range");
   return insertionPoint;
 }
 
@@ -1169,7 +1171,7 @@ void AbstractPatternEntryScope::forEachVarDeclWithLocalizableAccessors(
     ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const {
   getPatternEntry().getPattern()->forEachVariable([&](VarDecl *var) {
     if (llvm::any_of(var->getAllAccessors(),
-        [&](AccessorDecl *ad) { return isLocalizable(*ad); }))
+                     AbstractFunctionDeclScope::shouldCreateAccessorScope))
       foundOne(var);
   });
 }
@@ -1529,4 +1531,9 @@ void ASTScopeImpl::setChildrenCountWhenLastExpanded() {
 
 bool BraceStmtScope::shouldCreateScope(const BraceStmt *const bs) {
   return isLocalizable(*bs);
+}
+
+bool AbstractFunctionDeclScope::shouldCreateAccessorScope(
+    const AccessorDecl *const ad) {
+  return !ad->isImplicit() && isLocalizable(*ad);
 }

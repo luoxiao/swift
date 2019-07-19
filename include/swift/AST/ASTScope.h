@@ -880,6 +880,8 @@ public:
 
   NullablePtr<const void> getReferrent() const override;
 
+  static bool shouldCreateAccessorScope(const AccessorDecl *);
+
 protected:
   SourceRange
   getSourceRangeOfEnclosedParams(bool omitAssertions) const override;
