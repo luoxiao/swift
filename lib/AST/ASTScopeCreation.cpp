@@ -697,7 +697,9 @@ bool PatternEntryDeclScope::isHandledSpecially(const ASTNode n) {
 #ifndef NDEBUG
     if (auto *acc = dyn_cast<AccessorDecl>(d)) {
       if (auto *vd = dyn_cast<VarDecl>(acc->getStorage())) {
-        const bool foundIt = llvm::any_of(vd->getAllAccessors(), [&](AccessorDecl *vda) { return vda == acc; });
+        const bool foundIt =
+            llvm::any_of(vd->getAllAccessors(),
+                         [&](AccessorDecl *vda) { return vda == acc; });
         assert(foundIt && "Cannot build a scope if cannot find an accessor");
       }
     }
@@ -1456,7 +1458,7 @@ void PatternEntryDeclScope::beCurrent() {
 }
 bool PatternEntryDeclScope::isCurrent() const {
   if (initWhenLastExpanded != getPatternEntry().getInitAsWritten())
-   return false;
+    return false;
   unsigned varCount = 0;
   getPatternEntry().getPattern()->forEachVariable(
       [&](VarDecl *) { ++varCount; });

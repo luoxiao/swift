@@ -556,7 +556,8 @@ SourceRange AbstractFunctionDeclScope::getSourceRangeOfEnclosedParams(
   return s.isInvalid() || e.isInvalid() ? SourceRange() : SourceRange(s, e);
 }
 
-SourceLoc AbstractFunctionDeclScope::getParamsSourceLoc(AbstractFunctionDecl *decl) {
+SourceLoc
+AbstractFunctionDeclScope::getParamsSourceLoc(AbstractFunctionDecl *decl) {
   if (auto *c = dyn_cast<ConstructorDecl>(decl))
     return c->getParameters()->getLParenLoc();
 

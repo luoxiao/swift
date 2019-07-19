@@ -885,7 +885,7 @@ protected:
   getSourceRangeOfEnclosedParams(bool omitAssertions) const override;
 
 private:
-  static SourceLoc getParamsSourceLoc(AbstractFunctionDecl*);
+  static SourceLoc getParamsSourceLoc(AbstractFunctionDecl *);
 
 protected:
   NullablePtr<const GenericParamList> genericParams() const override;
@@ -1100,6 +1100,7 @@ public:
 class PatternEntryDeclScope final : public AbstractPatternEntryScope {
   const Expr *initWhenLastExpanded;
   unsigned varCountWhenLastExpanded = 0;
+
 public:
   PatternEntryDeclScope(PatternBindingDecl *pbDecl, unsigned entryIndex,
                         DeclVisibilityKind vis)
