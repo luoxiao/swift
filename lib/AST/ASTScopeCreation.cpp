@@ -693,8 +693,17 @@ void ASTScopeImpl::disownDescendants(ScopeCreator &scopeCreator) {
 }
 
 bool PatternEntryDeclScope::isHandledSpecially(const ASTNode n) {
-  if (auto *d = n.dyn_cast<Decl *>())
+  if (auto *d = n.dyn_cast<Decl *>()) {
+#ifndef NDEBUG
+    if (auto *acc = dyn_cast<AccessorDecl>(d)) {
+      if (auto *vd = dyn_cast<VarDecl>(acc->getStorage())) {
+        const bool foundIt = llvm::any_of(vd->getAllAccessors(), [&](AccessorDecl *vda) { return vda == acc; });
+        assert(foundIt && "Cannot build a scope if cannot find an accessor");
+      }
+    }
+#endif
     return isa<VarDecl>(d) || isa<AccessorDecl>(d);
+  }
   return false;
 }
 
