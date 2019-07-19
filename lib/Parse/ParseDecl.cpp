@@ -4807,6 +4807,9 @@ Parser::parseDeclVarGetSet(Pattern *pattern, ParseDeclOptions Flags,
   if (!PrimaryVar) {
     fillInAccessorTypeErrors(*this, accessors);
     Decls.append(accessors.Accessors.begin(), accessors.Accessors.end());
+    // Following preserves invariaent that accessor can be found from its VarDecl
+    accessors.record(*this, storage, Invalid, Flags, StaticLoc,
+                   Attributes, TyLoc, /*indices*/ nullptr, Decls);
     return nullptr;
   }
 
