@@ -176,7 +176,7 @@ public:
     // In that test the invalid PBD -> var decl which contains the desired
     // closure scope
     //    if (const auto *PBD = dyn_cast<PatternBindingDecl>(d))
-    //      if (PBD->isInvalid())
+    //      if (!isLocalizable(*PBD))
     //        return false;
     /// In
     /// \code
@@ -648,10 +648,10 @@ NullablePtr<ASTScopeImpl> ScopeCreator::createScopeFor(ASTNode n,
   return ASTVisitorForScopeCreation().visit(p, parent, *this);
 }
 
-  for (auto accessor : asd->getAllAccessors()) {
-    if (!accessor->isImplicit() && accessor->getStartLoc().isValid()) {
 void ScopeCreator::addChildrenForAllLocalizableAccessors(
     AbstractStorageDecl *asd, ASTScopeImpl *parent) {
+  for (auto *accessor : asd->getAllAccessors()) {
+    if (!accessor->isImplicit() && isLocalizable(*accessor)) {
       // Accessors are always nested within their abstract storage
       // declaration. The nesting may not be immediate, because subscripts may
       // have intervening scopes for generics.
@@ -1157,8 +1157,7 @@ AbstractPatternEntryScope::AbstractPatternEntryScope(
 void AbstractPatternEntryScope::forEachVarDeclWithLocalizableAccessors(
     ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const {
   getPatternEntry().getPattern()->forEachVariable([&](VarDecl *var) {
-    const bool hasAccessors = var->getBracesRange().isValid();
-    if (hasAccessors && !var->isImplicit())
+    if (var->hasAnyAccessors())
       foundOne(var);
   });
 }
