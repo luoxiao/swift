@@ -1598,12 +1598,29 @@ public:
   bool walkToDeclPre(Decl *D) override {
     if (const auto *dc = dyn_cast<DeclContext>(D))
       declContexts.insert({dc, 0});
+    else if (auto *icd = dyn_cast<IfConfigDecl>(D)) // TODO: fix ASTWalker
+      walkToInactiveClauses(icd);
+    else if (auto *pd = dyn_cast<ParamDecl>(D)) // TODO: fix walker
+      declContexts.insert({pd->getDefaultArgumentInitContext(), 0});
     return ASTWalker::walkToDeclPre(D);
   }
+
   std::pair<bool, Expr *> walkToExprPre(Expr *E) override {
     if (const auto *ce = dyn_cast<ClosureExpr>(E))
       declContexts.insert({ce, 0});
     return ASTWalker::walkToExprPre(E);
+  }
+
+private:
+  void walkToInactiveClauses(IfConfigDecl *icd) {
+    for (auto &clause : icd->getClauses()) {
+      // Generate scopes for any closures in the condition
+      clause.Cond->walk(*this);
+      if (clause.isActive)
+        return;
+      for (auto n : clause.Elements)
+        n.walk(*this);
+    }
   }
 };
 } // end namespace
