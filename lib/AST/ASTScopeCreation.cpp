@@ -30,6 +30,7 @@
 #include "swift/Basic/STLExtras.h"
 #include "llvm/Support/Compiler.h"
 #include <algorithm>
+#include <unordered_set>
 
 using namespace swift;
 using namespace ast_scope;
@@ -74,7 +75,8 @@ public:
 #include "swift/AST/PatternNodes.def"
 };
 
-/// A set that does the right pointer calculation
+/// A set that does the right pointer calculation for comparing Decls to
+/// DeclContexts, and Exprs
 class NodeSet {
   ::llvm::DenseSet<const void *> pointers;
 
@@ -163,7 +165,7 @@ public:
 
     auto *const d = n.get<Decl *>();
     // Implicit nodes may not have source information for name lookup.
-    if (!isLocalizable(d))
+    if (!isLocalizable(*d))
       return false;
     /// In \c Parser::parseDeclVarGetSet fake PBDs are created. Ignore them.
     /// Example:
@@ -353,6 +355,46 @@ public:
   }
 
 public:
+  /// Return true if scope tree contains all the decl contexts in the AST
+  bool containsAllDeclContextsFromAST() const {
+    auto allDeclContexts = findDeclContextsInAST();
+    llvm::DenseSet<const DeclContext *> bogusDCs;
+    sourceFileScope->postOrderDo([&](ASTScopeImpl *scope) {
+      if (auto *dc = scope->getDeclContext().getPtrOrNull()) {
+        auto iter = allDeclContexts.find(dc);
+        if (iter != allDeclContexts.end())
+          ++iter->second;
+        else
+          bogusDCs.insert(dc);
+      }
+    });
+    bool foundOmission = false;
+    for (const auto &p : allDeclContexts) {
+      if (p.second == 0) {
+        llvm::errs() << "\nASTScope tree omitted: " << p.first << ":\n";
+        p.first->printContext(llvm::errs());
+        if (auto *d = p.first->getAsDecl()) {
+          llvm::errs() << d << " implicit: " << d->isImplicit()
+                       << ", invalid: " << d->isInvalid() << " ";
+          d->getSourceRange().print(llvm::errs(), getASTContext().SourceMgr,
+                                    false);
+        }
+        llvm::errs() << "\n";
+        foundOmission = true;
+      }
+    }
+    for (const auto *dc : bogusDCs) {
+      llvm::errs() << "ASTScope tree confabulated: " << dc << ":\n";
+      dc->printContext(llvm::errs());
+    }
+    return !foundOmission && bogusDCs.empty();
+  }
+
+private:
+  /// Return a map of every DeclContext in the AST, and zero in the 2nd element.
+  llvm::DenseMap<const DeclContext *, unsigned> findDeclContextsInAST() const;
+
+public:
   void dump() const { print(llvm::errs()); }
 
   void print(raw_ostream &out) const {
@@ -396,6 +438,9 @@ void ASTSourceFileScope::addNewDeclsToTree() {
 
   insertionPoint = scopeCreator->addScopesToTree(insertionPoint, newDecls);
   numberOfDeclsAlreadySeen = SF->Decls.size();
+
+  assert(scopeCreator->containsAllDeclContextsFromAST() &&
+         "ASTScope tree missed some DeclContexts or made some up");
 }
 
 ASTSourceFileScope::ASTSourceFileScope(SourceFile *SF,
@@ -905,7 +950,7 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   if (!isa<AccessorDecl>(decl)) {
     leaf = scopeCreator.createGenericParamScopes(decl, decl->getGenericParams(),
                                                  leaf);
-    if (isLocalizable(decl) && getParamsSourceLoc(decl).isValid()) {
+    if (isLocalizable(*decl) && getParamsSourceLoc(decl).isValid()) {
       leaf = scopeCreator.createSubtree<AbstractFunctionParamsScope>(
           leaf, decl->getParameters(), nullptr);
     }
@@ -967,7 +1012,7 @@ void SwitchStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
                                          scopeCreator);
 
   for (auto caseStmt : stmt->getCases()) {
-    if (isLocalizable(caseStmt))
+    if (isLocalizable(*caseStmt))
       scopeCreator.createSubtreeIfUnique<CaseStmtScope>(this, caseStmt);
   }
 }
@@ -982,7 +1027,7 @@ void ForEachStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   //    let v: C { for b : Int -> S((array: P { }
   // the body is implicit and it would overlap the source range of the expr
   // above.
-  if (isLocalizable(stmt->getBody()))
+  if (isLocalizable(*stmt->getBody()))
     scopeCreator.createSubtree<ForEachPatternScope>(this, stmt);
 }
 
@@ -1536,4 +1581,38 @@ bool BraceStmtScope::shouldCreateScope(const BraceStmt *const bs) {
 bool AbstractFunctionDeclScope::shouldCreateAccessorScope(
     const AccessorDecl *const ad) {
   return isLocalizable(*ad);
+}
+
+#pragma mark verification
+
+namespace {
+class ASTCollector : public ASTWalker {
+  template <typename T> void record(T *n) {
+    if (const auto *dc = dyn_cast<DeclContext>(n))
+      declContexts.insert(dc);
+  }
+
+public:
+  llvm::DenseMap<const DeclContext *, unsigned> declContexts;
+
+  bool walkToDeclPre(Decl *D) override {
+    if (const auto *dc = dyn_cast<DeclContext>(D))
+      declContexts.insert({dc, 0});
+    return ASTWalker::walkToDeclPre(D);
+  }
+  std::pair<bool, Expr *> walkToExprPre(Expr *E) override {
+    if (const auto *ce = dyn_cast<ClosureExpr>(E))
+      declContexts.insert({ce, 0});
+    return ASTWalker::walkToExprPre(E);
+  }
+};
+} // end namespace
+
+llvm::DenseMap<const DeclContext *, unsigned>
+ScopeCreator::findDeclContextsInAST() const {
+  ASTCollector collector;
+  sourceFileScope->SF->walk(collector);
+  // Walker omits the top
+  collector.declContexts.insert({sourceFileScope->SF, 0});
+  return collector.declContexts;
 }
