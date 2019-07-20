@@ -1604,6 +1604,8 @@ public:
       walkToInactiveClauses(icd);
     else if (auto *pd = dyn_cast<ParamDecl>(D))
       record(pd->getDefaultArgumentInitContext());
+    else if (auto *pbd = dyn_cast<PatternBindingDecl>(D))
+      recordInitializers(pbd);
     return ASTWalker::walkToDeclPre(D);
   }
 
@@ -1623,6 +1625,11 @@ private:
         for (auto n : clause.Elements)
           n.walk(*this);
     }
+  }
+  
+  void recordInitializers(PatternBindingDecl *pbd) {
+    for (auto entry : pbd->getPatternList())
+      record(entry.getInitContext());
   }
 };
 } // end namespace
