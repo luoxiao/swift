@@ -1617,11 +1617,11 @@ private:
   void walkToInactiveClauses(IfConfigDecl *icd) {
     for (auto &clause : icd->getClauses()) {
       // Generate scopes for any closures in the condition
-      clause.Cond->walk(*this);
-      if (clause.isActive)
-        return;
-      for (auto n : clause.Elements)
-        n.walk(*this);
+      if (clause.Cond)
+        clause.Cond->walk(*this);
+      if (!clause.isActive)
+        for (auto n : clause.Elements)
+          n.walk(*this);
     }
   }
 };
