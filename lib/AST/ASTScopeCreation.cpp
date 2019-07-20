@@ -1587,27 +1587,29 @@ bool AbstractFunctionDeclScope::shouldCreateAccessorScope(
 
 namespace {
 class ASTCollector : public ASTWalker {
-  template <typename T> void record(T *n) {
-    if (const auto *dc = dyn_cast<DeclContext>(n))
-      declContexts.insert(dc);
-  }
 
 public:
   llvm::DenseMap<const DeclContext *, unsigned> declContexts;
 
+  void record(const DeclContext *dc) {
+    if (dc)
+      declContexts.insert({dc, 0});
+  }
+
   bool walkToDeclPre(Decl *D) override {
     if (const auto *dc = dyn_cast<DeclContext>(D))
-      declContexts.insert({dc, 0});
-    else if (auto *icd = dyn_cast<IfConfigDecl>(D)) // TODO: fix ASTWalker
+      record(dc);
+    if (auto *icd =
+            dyn_cast<IfConfigDecl>(D)) // TODO: fix ASTWalker with option
       walkToInactiveClauses(icd);
-    else if (auto *pd = dyn_cast<ParamDecl>(D)) // TODO: fix walker
-      declContexts.insert({pd->getDefaultArgumentInitContext(), 0});
+    else if (auto *pd = dyn_cast<ParamDecl>(D))
+      record(pd->getDefaultArgumentInitContext());
     return ASTWalker::walkToDeclPre(D);
   }
 
   std::pair<bool, Expr *> walkToExprPre(Expr *E) override {
     if (const auto *ce = dyn_cast<ClosureExpr>(E))
-      declContexts.insert({ce, 0});
+      record(ce);
     return ASTWalker::walkToExprPre(E);
   }
 
@@ -1630,6 +1632,6 @@ ScopeCreator::findDeclContextsInAST() const {
   ASTCollector collector;
   sourceFileScope->SF->walk(collector);
   // Walker omits the top
-  collector.declContexts.insert({sourceFileScope->SF, 0});
+  collector.record(sourceFileScope->SF);
   return collector.declContexts;
 }
