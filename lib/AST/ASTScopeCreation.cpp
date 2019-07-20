@@ -371,16 +371,19 @@ public:
     bool foundOmission = false;
     for (const auto &p : allDeclContexts) {
       if (p.second == 0) {
-        llvm::errs() << "\nASTScope tree omitted: " << p.first << ":\n";
-        p.first->printContext(llvm::errs());
         if (auto *d = p.first->getAsDecl()) {
+          llvm::errs() << "\nASTScope tree omitted: " << p.first << ":\n";
+          p.first->printContext(llvm::errs());
           llvm::errs() << d << " implicit: " << d->isImplicit()
                        << ", invalid: " << d->isInvalid() << " ";
           d->getSourceRange().print(llvm::errs(), getASTContext().SourceMgr,
                                     false);
-        }
         llvm::errs() << "\n";
         foundOmission = true;
+        }
+        else {
+          // If no decl, no source range, so no scope
+        }
       }
     }
     for (const auto *dc : bogusDCs) {
@@ -842,6 +845,9 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
   // initializer (because of InterpolatedLiteralStrings and EditorPlaceHolders),
   // so compute it ourselves.
   SourceLoc initializerEnd;
+  assert(patternEntry.getInit() == patternEntry.getInitAsWritten());
+  // Even if this predicate fails, there may be an initContext but
+  // we cannot make a scope for it, since no source range.
   if (patternEntry.getInitAsWritten() &&
       isLocalizable(*patternEntry.getInitAsWritten())) {
     auto *initializer =
