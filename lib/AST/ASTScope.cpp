@@ -187,7 +187,7 @@ NullablePtr<DeclContext> AbstractFunctionDeclScope::getDeclContext() const {
   return decl;
 }
 
-NullablePtr<DeclContext> AbstractFunctionParamsScope::getDeclContext() const {
+NullablePtr<DeclContext> ParameterListScope::getDeclContext() const {
   return matchingContext;
 }
 
@@ -203,7 +203,7 @@ std::string GenericTypeOrExtensionScope::getClassName() const {
 DEFINE_GET_CLASS_NAME(ASTSourceFileScope)
 DEFINE_GET_CLASS_NAME(GenericParamScope)
 DEFINE_GET_CLASS_NAME(AbstractFunctionDeclScope)
-DEFINE_GET_CLASS_NAME(AbstractFunctionParamsScope)
+DEFINE_GET_CLASS_NAME(ParameterListScope)
 DEFINE_GET_CLASS_NAME(MethodBodyScope)
 DEFINE_GET_CLASS_NAME(PureFunctionBodyScope)
 DEFINE_GET_CLASS_NAME(DefaultArgumentInitializerScope)
@@ -220,6 +220,7 @@ DEFINE_GET_CLASS_NAME(TopLevelCodeScope)
 DEFINE_GET_CLASS_NAME(SpecializeAttributeScope)
 DEFINE_GET_CLASS_NAME(SubscriptDeclScope)
 DEFINE_GET_CLASS_NAME(VarDeclScope)
+DEFINE_GET_CLASS_NAME(EnumElementScope)
 DEFINE_GET_CLASS_NAME(IfStmtScope)
 DEFINE_GET_CLASS_NAME(WhileStmtScope)
 DEFINE_GET_CLASS_NAME(GuardStmtScope)

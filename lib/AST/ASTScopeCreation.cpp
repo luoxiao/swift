@@ -618,8 +618,7 @@ public:
   NullablePtr<ASTScopeImpl> visitEnumElementDecl(EnumElementDecl *eed,
                                                  ASTScopeImpl *p,
                                                  ScopeCreator &scopeCreator) {
-    if (auto *expr = eed->getRawValueExpr()) // might contain a closure
-      visitExpr(expr, p, scopeCreator);
+    scopeCreator.createSubtree<EnumElementScope>(p, eed);
     return p;
   }
 
@@ -785,7 +784,7 @@ ASTScopeImpl *ASTScopeImpl::expandAndBeCurrent(ScopeCreator &scopeCreator) {
 #define NO_EXPANSION(Scope)                                                    \
   ASTScopeImpl *Scope::expandSpecifically(ScopeCreator &) { return this; }
 
-CREATES_NEW_INSERTION_POINT(AbstractFunctionParamsScope)
+CREATES_NEW_INSERTION_POINT(ParameterListScope)
 CREATES_NEW_INSERTION_POINT(ConditionalClauseScope)
 CREATES_NEW_INSERTION_POINT(GuardStmtScope)
 CREATES_NEW_INSERTION_POINT(PatternEntryDeclScope)
@@ -797,6 +796,7 @@ CREATES_NEW_INSERTION_POINT(TopLevelCodeScope)
 NO_NEW_INSERTION_POINT(AbstractFunctionBodyScope)
 NO_NEW_INSERTION_POINT(AbstractFunctionDeclScope)
 NO_NEW_INSERTION_POINT(AttachedPropertyWrapperScope)
+NO_NEW_INSERTION_POINT(EnumElementScope)
 
 NO_NEW_INSERTION_POINT(CaptureListScope)
 NO_NEW_INSERTION_POINT(CaseStmtScope)
@@ -824,8 +824,7 @@ NO_EXPANSION(LookupParentDiversionScope)
 #undef CREATES_NEW_INSERTION_POINT
 #undef NO_NEW_INSERTION_POINT
 
-ASTScopeImpl *
-AbstractFunctionParamsScope::expandAScopeThatCreatesANewInsertionPoint(
+ASTScopeImpl *ParameterListScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
   // Each initializer for a function parameter is its own, sibling, scope.
   // Unlike generic parameters or pattern initializers, it cannot refer to a
@@ -957,7 +956,7 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     leaf = scopeCreator.createGenericParamScopes(decl, decl->getGenericParams(),
                                                  leaf);
     if (isLocalizable(*decl) && getParamsSourceLoc(decl).isValid()) {
-      leaf = scopeCreator.createSubtree<AbstractFunctionParamsScope>(
+      leaf = scopeCreator.createSubtree<ParameterListScope>(
           leaf, decl->getParameters(), nullptr);
     }
   }
@@ -970,6 +969,14 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     else
       scopeCreator.createSubtree<PureFunctionBodyScope>(leaf, decl);
   }
+}
+
+void EnumElementScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
+    ScopeCreator &scopeCreator) {
+  if (auto *pl = decl->getParameterList())
+    scopeCreator.createSubtree<ParameterListScope>(this, pl, nullptr);
+  if (auto *expr = decl->getRawValueExpr()) // might contain a closure
+    ASTVisitorForScopeCreation().visitExpr(expr, this, scopeCreator);
 }
 
 void AbstractFunctionBodyScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
@@ -1071,7 +1078,7 @@ void SubscriptDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   auto *sub = decl;
   auto *leaf =
       scopeCreator.createGenericParamScopes(sub, sub->getGenericParams(), this);
-  auto *params = scopeCreator.createSubtree<AbstractFunctionParamsScope>(
+  auto *params = scopeCreator.createSubtree<ParameterListScope>(
       leaf, sub->getIndices(), sub->getGetter());
   scopeCreator.addChildrenForAllLocalizableAccessors(sub, params);
 }
@@ -1248,7 +1255,7 @@ AbstractFunctionDeclScope::getEnclosingAbstractStorageDecl() const {
   return getParent().get()->getEnclosingAbstractStorageDecl();
 }
 NullablePtr<AbstractStorageDecl>
-AbstractFunctionParamsScope::getEnclosingAbstractStorageDecl() const {
+ParameterListScope::getEnclosingAbstractStorageDecl() const {
   return getParent().get()->getEnclosingAbstractStorageDecl();
 }
 NullablePtr<AbstractStorageDecl>

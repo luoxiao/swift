@@ -183,6 +183,11 @@ SubscriptDeclScope::getChildlessSourceRange(const bool omitAssertions) const {
 }
 
 SourceRange
+EnumElementScope::getChildlessSourceRange(const bool omitAssertions) const {
+  return decl->getSourceRange();
+}
+
+SourceRange
 WholeClosureScope::getChildlessSourceRange(const bool omitAssertions) const {
   return closureExpr->getSourceRange();
 }
@@ -292,14 +297,14 @@ SourceRange AbstractFunctionDeclScope::getChildlessSourceRange(
   return decl->getBody()->getSourceRange();
 }
 
-SourceRange AbstractFunctionParamsScope::getChildlessSourceRange(
-    const bool omitAssertions) const {
+SourceRange
+ParameterListScope::getChildlessSourceRange(const bool omitAssertions) const {
   const auto rangeForGoodInput = getSourceRangeOfEnclosedParams(omitAssertions);
   return SourceRange(rangeForGoodInput.Start,
                      fixupEndForBadInput(rangeForGoodInput));
 }
 
-SourceLoc AbstractFunctionParamsScope::fixupEndForBadInput(
+SourceLoc ParameterListScope::fixupEndForBadInput(
     const SourceRange rangeForGoodInput) const {
   const auto s = rangeForGoodInput.Start;
   const auto e = rangeForGoodInput.End;
@@ -539,6 +544,12 @@ static SourceLoc getStartOfFirstParam(ClosureExpr *closure) {
 SourceRange
 ASTScopeImpl::getSourceRangeOfEnclosedParams(const bool omitAssertions) const {
   return getParent().get()->getSourceRangeOfEnclosedParams(omitAssertions);
+}
+
+SourceRange
+EnumElementScope::getSourceRangeOfEnclosedParams(bool omitAssertions) const {
+  auto *pl = decl->getParameterList();
+  return pl ? pl->getSourceRange() : SourceRange();
 }
 
 SourceRange SubscriptDeclScope::getSourceRangeOfEnclosedParams(

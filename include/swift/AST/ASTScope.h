@@ -896,18 +896,19 @@ protected:
   resolveIsCascadingUseForThisScope(Optional<bool>) const override;
 };
 
-/// The parameters for an abstract function (init/func/deinit).
-class AbstractFunctionParamsScope final : public ASTScopeImpl {
+/// The parameters for an abstract function (init/func/deinit)., subscript, and
+/// enum element
+class ParameterListScope final : public ASTScopeImpl {
 public:
   ParameterList *const params;
   /// For get functions in subscript declarations,
   /// a lookup into the subscript parameters must count as the get func context.
   const NullablePtr<DeclContext> matchingContext;
 
-  AbstractFunctionParamsScope(ParameterList *params,
-                              NullablePtr<DeclContext> matchingContext)
+  ParameterListScope(ParameterList *params,
+                     NullablePtr<DeclContext> matchingContext)
       : params(params), matchingContext(matchingContext) {}
-  virtual ~AbstractFunctionParamsScope() {}
+  virtual ~ParameterListScope() {}
 
 protected:
   ASTScopeImpl *expandSpecifically(ScopeCreator &scopeCreator) override;
@@ -1476,6 +1477,29 @@ public:
     return decl;
   }
   bool isThisAnAbstractStorageDecl() const override { return true; }
+};
+
+class EnumElementScope : public ASTScopeImpl {
+  EnumElementDecl *const decl;
+
+public:
+  EnumElementScope(EnumElementDecl *e) : decl(e) {}
+
+  SourceRange
+  getChildlessSourceRange(bool omitAssertions = false) const override;
+
+  std::string getClassName() const override;
+  ASTScopeImpl *expandSpecifically(ScopeCreator &) override;
+  NullablePtr<DeclContext> getDeclContext() const override { return decl; }
+  NullablePtr<Decl> getDeclIfAny() const override { return decl; }
+  Decl *getDecl() const { return decl; }
+
+protected:
+  SourceRange
+  getSourceRangeOfEnclosedParams(bool omitAssertions) const override;
+
+private:
+  void expandAScopeThatDoesNotCreateANewInsertionPoint(ScopeCreator &);
 };
 
 class AbstractStmtScope : public ASTScopeImpl {
