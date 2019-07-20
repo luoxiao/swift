@@ -212,7 +212,8 @@ SourceRange PatternEntryInitializerScope::getChildlessSourceRange(
 
 SourceRange
 VarDeclScope::getChildlessSourceRange(const bool omitAssertions) const {
-  return decl->getBracesRange();
+  const auto br = decl->getBracesRange();
+  return br.isValid() ? br : decl->getSourceRange();
 }
 
 SourceRange
