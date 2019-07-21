@@ -1610,12 +1610,15 @@ public:
   }
 
   bool walkToDeclPre(Decl *D) override {
+    // catchForDebugging(D, "CTypes.swift", 66);
     if (const auto *dc = dyn_cast<DeclContext>(D))
       record(dc);
     if (auto *icd =
-            dyn_cast<IfConfigDecl>(D)) // TODO: fix ASTWalker with option
+            dyn_cast<IfConfigDecl>(D)) { // TODO: fix ASTWalker with option
       walkToInactiveClauses(icd);
-    else if (auto *pd = dyn_cast<ParamDecl>(D))
+      return false;
+    }
+    if (auto *pd = dyn_cast<ParamDecl>(D))
       record(pd->getDefaultArgumentInitContext());
     else if (auto *pbd = dyn_cast<PatternBindingDecl>(D))
       recordInitializers(pbd);
@@ -1634,15 +1637,27 @@ private:
       // Generate scopes for any closures in the condition
       if (clause.Cond)
         clause.Cond->walk(*this);
-      if (!clause.isActive)
-        for (auto n : clause.Elements)
-          n.walk(*this);
+      for (auto n : clause.Elements)
+        n.walk(*this);
     }
   }
   
   void recordInitializers(PatternBindingDecl *pbd) {
     for (auto entry : pbd->getPatternList())
       record(entry.getInitContext());
+  }
+
+  void catchForDebugging(Decl *D, const char *file, const int line) {
+    auto &SM = D->getASTContext().SourceMgr;
+    auto loc = D->getStartLoc();
+    if (!loc.isValid())
+      return;
+    auto bufID = SM.findBufferContainingLoc(loc);
+    auto f = SM.getIdentifierForBuffer(bufID);
+    auto lin = SM.getLineNumber(loc);
+    if (f.endswith(file) /*&& lin == line*/)
+      llvm::errs() << "HERE " << lin << "\n";
+    ;
   }
 };
 } // end namespace
