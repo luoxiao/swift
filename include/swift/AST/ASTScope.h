@@ -711,9 +711,6 @@ public:
   bool doesDeclHaveABody() const override;
   void expandBody(ScopeCreator &) override;
 
-private:
-  std::vector<Decl *> getMembersInSourceOrder(ScopeCreator &) const;
-
 protected:
   void beCurrent() override;
   bool isCurrent() const override;
@@ -1753,7 +1750,6 @@ protected:
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
-  llvm::SmallVector<ASTNode, 0> getElementsInSourceOrder(ScopeCreator &) const;
 
 public:
   std::string getClassName() const override;

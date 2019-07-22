@@ -343,6 +343,85 @@ public:
       fn(specializeAttr);
   }
 
+  llvm::SmallVector<ASTNode, 0> sortAndCullElementsOrMembers(DeclRange decls) {
+    llvm::SmallVector<ASTNode, 0> nodes;
+    std::transform(decls.begin(), decls.end(), nodes.begin(),
+                   [&](Decl *d) { return ASTNode(d); });
+    return sortAndCullElementsOrMembers(nodes);
+  }
+
+  llvm::SmallVector<ASTNode, 0>
+  sortAndCullElementsOrMembers(ArrayRef<ASTNode> input) const {
+    return sortBySourceRange(cullActiveClauses(input));
+  }
+
+private:
+  llvm::SmallVector<ASTNode, 0>
+  cullActiveClauses(ArrayRef<ASTNode> input) const {
+    llvm::SmallVector<ASTNode, 0> culled;
+    auto activeClauseElements = collectElementsOfActiveClauses(input);
+    llvm::copy_if(input, std::back_inserter(culled), [&](ASTNode n) {
+      return isLocalizable(n) &&
+             !activeClauseElements.count(n.getOpaqueValue());
+    });
+    return culled;
+  }
+
+  std::unordered_set<void*>
+  collectElementsOfActiveClauses(ArrayRef<ASTNode> input) const {
+    std::unordered_set<void*> activeClauseElements;
+    for (ASTNode n : input)
+      if (auto *d = n.dyn_cast<Decl *>())
+        if (auto *ifc = dyn_cast<IfConfigDecl>(d))
+          if (auto *ac = ifc->getActiveClause())
+            for (auto n : ac->Elements)
+              activeClauseElements.insert(n.getOpaqueValue());
+    return activeClauseElements;
+  }
+
+  llvm::SmallVector<ASTNode, 0>
+  sortBySourceRange(ArrayRef<ASTNode> unordered) const {
+    auto compareNodes = [&](const ASTNode n1, const ASTNode n2) {
+      // In general, we sort by start location so the the child scopes
+      // are created in source order.
+      // However, any VarDecls must come after the corresponding
+      // PatternBindingDecls so that those VarDecls get processed without the
+      // PBDs and are not rejected as duplicates.
+      if (n1.getStartLoc() == n2.getStartLoc()) {
+        if (isVarDeclInPatternBindingDecl(n1, n2))
+          return false; // d2 comes first
+        return true;    // d1 comes first
+      }
+      return isNotAfter(n1, n2);
+    };
+
+    llvm::SmallVector<ASTNode, 0> sorted;
+    llvm::copy(unordered, std::back_inserter(sorted));
+    std::stable_sort(sorted.begin(), sorted.end(), compareNodes);
+    return sorted;
+  }
+
+  bool isNotAfter(ASTNode n1, ASTNode n2) const {
+    auto cmpLoc = [&](const SourceLoc l1, const SourceLoc l2) {
+      return l1 == l2 ? 0 : ctx.SourceMgr.isBeforeInBuffer(l1, l2) ? -1 : 1;
+    };
+    const int startOrder = cmpLoc(n1.getStartLoc(), n2.getStartLoc());
+    const int endOrder = cmpLoc(n1.getEndLoc(), n2.getEndLoc());
+
+    assert(startOrder * endOrder != -1 && "Cannot process overlapping nodes");
+    return startOrder + endOrder < 1;
+  }
+
+  static bool isVarDeclInPatternBindingDecl(ASTNode n1, ASTNode n2) {
+    if (auto *d1 = n1.dyn_cast<Decl *>())
+      if (auto *vd = dyn_cast<VarDecl>(d1))
+        if (auto *d2 = n2.dyn_cast<Decl *>())
+          if (auto *pbd = dyn_cast<PatternBindingDecl>(d2))
+            return vd->getParentPatternBinding() == pbd;
+    return false;
+  }
+
+public:
   bool shouldThisNodeBeScopedWhenEncountered(ASTNode n) {
     // Do not scope VarDecls or Accessors when encountered because
     // they get created directly by the pattern code.
@@ -630,12 +709,14 @@ public:
                                               ScopeCreator &scopeCreator) {
     auto *activeClauseLookupParent = p;
     // Generate scopes for each clause
+    // Include active clause because of culling.
     for (auto &clause : icd->getClauses()) {
       // Generate scopes for any closures in the condition
       visitExpr(clause.Cond, p, scopeCreator);
       // First element in this clause will be under the enclosing scope
       auto *insertionPointForThisClause = p;
-      for (auto n : clause.Elements) {
+      for (auto n :
+           scopeCreator.sortAndCullElementsOrMembers(clause.Elements)) {
         // Or maybe skip active clause?? No, source order.
         insertionPointForThisClause =
             scopeCreator.createScopeFor(n, insertionPointForThisClause)
@@ -913,8 +994,9 @@ GenericTypeOrExtensionScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  return scopeCreator.addScopesToTree(this,
-                                      getElementsInSourceOrder(scopeCreator));
+  // TODO: remove the sort after performing rdar://53254395
+  return scopeCreator.addScopesToTree(
+      this, scopeCreator.sortAndCullElementsOrMembers(stmt->getElements()));
 }
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
@@ -1339,7 +1421,11 @@ void AbstractFunctionBodyScope::expandBody(ScopeCreator &scopeCreator) {
 void GenericTypeOrExtensionScope::expandBody(ScopeCreator &) {}
 
 void IterableTypeScope::expandBody(ScopeCreator &scopeCreator) {
-  for (auto n : getMembersInSourceOrder(scopeCreator))
+  if (auto *e = dyn_cast<EnumDecl>(getDecl()))
+    if (getSourceManager().getLineNumber(e->getStartLoc()) == 1744)
+      llvm::errs() << "HERE";
+  for (auto n : scopeCreator.sortAndCullElementsOrMembers(
+           getIterableDeclContext().get()->getMembers()))
     scopeCreator.createScopeFor(n, this);
   explicitMemberCount =
       getIterableDeclContext().get()->getExplicitMemberCount();
@@ -1357,84 +1443,6 @@ void ASTScopeImpl::reexpand(ScopeCreator &scopeCreator) {
   disownDescendants(scopeCreator);
   expandAndBeCurrent(scopeCreator);
   addReusedScopes(scopesToReuse);
-}
-
-/// The AST contains \c PatternBindingDecls and \c VarDecls which are
-/// mutually redundant. It's important that the \c PatternBindingDecls
-/// get processed first, so that the \c VarDecls are not rejected as
-/// duplicates, because that causes their accessors to be overlooked.
-/// This requirement is consistent with sorting by start location.
-static bool patternPreceedsVar(const Decl *d1, const Decl *d2,
-                               const bool comesBefore) {
-  const Decl *willBe1st;
-  const Decl *willBe2nd;
-  if (comesBefore) {
-    willBe1st = d1;
-    willBe2nd = d2;
-  } else {
-    willBe1st = d2;
-    willBe2nd = d1;
-  }
-
-  auto *vd = dyn_cast<VarDecl>(willBe1st);
-  auto *pbd = dyn_cast<PatternBindingDecl>(willBe2nd);
-  return !vd || !pbd || vd->getParentPatternBinding() != pbd;
-}
-
-static bool isVarDeclInPatternBindingDecl(const Decl *const d1,
-                                          const Decl *const d2) {
-  if (auto *vd = dyn_cast<VarDecl>(d1)) {
-    if (auto *pbd = dyn_cast<PatternBindingDecl>(d2))
-      return vd->getParentPatternBinding() == pbd;
-  }
-  return false;
-}
-
-llvm::SmallVector<ASTNode, 0>
-BraceStmtScope::getElementsInSourceOrder(ScopeCreator &scopeCreator) const {
-  // TODO: remove the sort after performing rdar://53254395
-  llvm::SmallVector<ASTNode, 0> sortedElements{stmt->getElements().begin(),
-                                               stmt->getElements().end()};
-  SourceManager &SM = getSourceManager();
-  std::stable_sort(sortedElements.begin(), sortedElements.end(),
-                   [&](ASTNode n1, ASTNode n2) {
-                     return SM.isBeforeInBuffer(n1.getEndLoc(), n2.getEndLoc());
-                   });
-  return sortedElements;
-}
-
-std::vector<Decl *> IterableTypeScope::getMembersInSourceOrder(
-    ScopeCreator &scopeCreator) const {
-  std::vector<Decl *> sortedMembers;
-  for (auto *d : getIterableDeclContext().get()->getMembers())
-    if (isLocalizable(*d))
-      sortedMembers.push_back(d);
-
-  const auto &SM = getSourceManager();
-  auto cmp = [&](const Decl *d1, const Decl *d2) {
-    // In general, we sort by start location so the the child scopes
-    // are created in source order.
-    // However, any VarDecls must come after the corresponding
-    // PatternBindingDecls so that those VarDecls get processed without the PBDs
-    // and are not rejected as duplicates.
-    if (d1->getStartLoc() == d2->getStartLoc()) {
-      if (isVarDeclInPatternBindingDecl(d1, d2))
-        return false; // d2 comes first
-      return true;    // d1 comes first
-    }
-
-    const bool comesBefore =
-        SM.isBeforeInBuffer(d1->getStartLoc(), d2->getStartLoc());
-    assert(patternPreceedsVar(d1, d2, comesBefore) &&
-           "Pattern must preceed var.");
-    return comesBefore;
-  };
-
-  // Common case is building first time and is sorted
-  if (!std::is_sorted(sortedMembers.begin(), sortedMembers.end(), cmp))
-    std::stable_sort(sortedMembers.begin(), sortedMembers.end(), cmp);
-
-  return sortedMembers;
 }
 
 #pragma mark getScopeCreator
@@ -1622,7 +1630,7 @@ public:
   }
 
   bool walkToDeclPre(Decl *D) override {
-    // catchForDebugging(D, "CTypes.swift", 66);
+    catchForDebugging(D, "DictionaryBridging.swift", 694);
     if (const auto *dc = dyn_cast<DeclContext>(D))
       record(dc);
     if (auto *icd =
