@@ -73,11 +73,6 @@ ASTScopeImpl::widenSourceRangeForChildren(const SourceRange range,
 
 #pragma mark validation
 
-bool ASTScopeImpl::verifySourceRange() const {
-  return verifyThatChildrenAreContained() &&
-         verifyThatThisNodeComeAfterItsPriorSibling();
-}
-
 bool ASTScopeImpl::hasValidSourceRange() const {
   const auto sourceRange = getSourceRange();
   return sourceRange.Start.isValid() && sourceRange.End.isValid() &&
@@ -96,14 +91,15 @@ bool ASTScopeImpl::precedesInSource(const ASTScopeImpl *next) const {
                                               getSourceRange().End);
 }
 
-bool ASTScopeImpl::verifyThatChildrenAreContained() const {
+bool ASTScopeImpl::verifyThatChildrenAreContainedWithin(
+    const SourceRange range) const {
   // assumes children are already in order
   if (getChildren().empty())
     return true;
   const SourceRange rangeOfChildren =
       SourceRange(getChildren().front()->getSourceRange().Start,
                   getChildren().back()->getSourceRange().End);
-  if (getSourceManager().rangeContains(getSourceRange(), rangeOfChildren))
+  if (getSourceManager().rangeContains(range, rangeOfChildren))
     return true;
   auto &out = verificationError() << "children not contained in its parent\n";
   if (getChildren().size() == 1) {
@@ -416,6 +412,8 @@ SourceRange LookupParentDiversionScope::getChildlessSourceRange(
 SourceRange ASTScopeImpl::getSourceRange(const bool omitAssertions) const {
   if (!isSourceRangeCached(omitAssertions))
     cacheSourceRangeOfMeAndDescendants(omitAssertions);
+  assert(verifyThatChildrenAreContainedWithin(*cachedSourceRange) &&
+         "Search will fail");
   return *cachedSourceRange;
 }
 

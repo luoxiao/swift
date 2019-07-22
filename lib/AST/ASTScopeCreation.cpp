@@ -249,7 +249,10 @@ private:
   ASTScopeImpl *createSubtreeImpl(ASTScopeImpl *parent, Args... args) {
     auto *child = new (ctx) Scope(args...);
     parent->addChild(child, ctx);
-    return child->expandAndBeCurrent(*this);
+    ASTScopeImpl *insertionPoint = child->expandAndBeCurrent(*this);
+    assert(child->verifyThatThisNodeComeAfterItsPriorSibling() &&
+           "Ensure search will work");
+    return insertionPoint;
   }
 
 public:
@@ -1539,8 +1542,11 @@ std::vector<ASTScopeImpl *> ASTScopeImpl::rescueScopesToReuse() {
 }
 void ASTScopeImpl::addReusedScopes(ArrayRef<ASTScopeImpl *> scopesToAdd) {
   auto &ctx = getASTContext();
-  for (auto *s : scopesToAdd)
+  for (auto *s : scopesToAdd) {
     addChild(s, ctx);
+    assert(s->verifyThatThisNodeComeAfterItsPriorSibling() &&
+           "Ensure search will work");
+  }
 }
 // TODO: factor abs fn body scope and top level code scope
 std::vector<ASTScopeImpl *> AbstractFunctionBodyScope::rescueScopesToReuse() {

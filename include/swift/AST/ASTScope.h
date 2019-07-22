@@ -247,9 +247,8 @@ protected:
   SourceManager &getSourceManager() const;
   bool hasValidSourceRange() const;
   bool hasValidSourceRangeOfIgnoredASTNodes() const;
-  bool verifySourceRange() const;
   bool precedesInSource(const ASTScopeImpl *) const;
-  bool verifyThatChildrenAreContained() const;
+  bool verifyThatChildrenAreContainedWithin(SourceRange) const;
   bool verifyThatThisNodeComeAfterItsPriorSibling() const;
 
   virtual SourceRange getSourceRangeOfEnclosedParams(bool omitAssertions) const;
