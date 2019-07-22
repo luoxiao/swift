@@ -917,12 +917,15 @@ ASTScopeImpl *ParameterListScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
+  forEachVarDeclWithLocalizableAccessors(scopeCreator, [&](VarDecl *var) {
+    scopeCreator.createSubtreeIfUnique<VarDeclScope>(this, var);
+  });
+
   auto patternEntry = getPatternEntry();
   // Create a child for the initializer, if present.
   // Cannot trust the source range given in the ASTScopeImpl for the end of the
   // initializer (because of InterpolatedLiteralStrings and EditorPlaceHolders),
   // so compute it ourselves.
-  SourceLoc initializerEnd;
   assert(patternEntry.getInit() == patternEntry.getInitAsWritten());
   // Even if this predicate fails, there may be an initContext but
   // we cannot make a scope for it, since no source range.
@@ -931,12 +934,8 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
     auto *initializer =
         scopeCreator.createSubtree<PatternEntryInitializerScope>(
             this, decl, patternEntryIndex, vis);
-    initializerEnd = initializer->getSourceRange().End;
   }
   // Add accessors for the variables in this pattern.
-  forEachVarDeclWithLocalizableAccessors(scopeCreator, [&](VarDecl *var) {
-    scopeCreator.createSubtreeIfUnique<VarDeclScope>(this, var);
-  });
 
   return getParent().get();
 }
@@ -1668,7 +1667,7 @@ private:
     auto f = SM.getIdentifierForBuffer(bufID);
     auto lin = SM.getLineNumber(loc);
     if (f.endswith(file) && lin == line)
-      llvm::errs() << "HERE catchForDebugging" << lin << "\n";
+      llvm::errs() << "HERE catchForDebugging: " << lin << "\n";
   }
 };
 } // end namespace
