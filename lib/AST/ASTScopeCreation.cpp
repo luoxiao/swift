@@ -343,25 +343,31 @@ public:
       fn(specializeAttr);
   }
 
-  llvm::SmallVector<ASTNode, 0> sortAndCullElementsOrMembers(DeclRange decls) {
-    llvm::SmallVector<ASTNode, 0> nodes;
-    std::transform(decls.begin(), decls.end(), nodes.begin(),
+  std::vector<ASTNode> sortAndCullElementsOrMembers(DeclRange decls) {
+    std::vector<ASTNode> nodes;
+    std::transform(decls.begin(), decls.end(), std::back_inserter(nodes),
                    [&](Decl *d) { return ASTNode(d); });
     return sortAndCullElementsOrMembers(nodes);
   }
 
-  llvm::SmallVector<ASTNode, 0>
+  std::vector<ASTNode>
   sortAndCullElementsOrMembers(ArrayRef<ASTNode> input) const {
-    return sortBySourceRange(cullActiveClauses(input));
+    return sortBySourceRange(cull(input));
   }
 
 private:
-  llvm::SmallVector<ASTNode, 0>
-  cullActiveClauses(ArrayRef<ASTNode> input) const {
-    llvm::SmallVector<ASTNode, 0> culled;
+  /// Remove active clauses because we'll expand all clauses of ifConfigs.
+  /// Remove VarDecls because we'll find them when we expand the
+  /// PatternBindingDecls. Remove AccessorDecls because they overlap & we'll
+  /// find them when we expand the subscripts and var decls. Remove EnunCases
+  /// because the overlap EnumElements and AST includes the elements in the
+  /// members.
+  std::vector<ASTNode> cull(ArrayRef<ASTNode> input) const {
+    std::vector<ASTNode> culled;
     auto activeClauseElements = collectElementsOfActiveClauses(input);
     llvm::copy_if(input, std::back_inserter(culled), [&](ASTNode n) {
-      return isLocalizable(n) &&
+      return isLocalizable(n) && !n.isDecl(DeclKind::Var) &&
+             !n.isDecl(DeclKind::Accessor) && !n.isDecl(DeclKind::EnumCase) &&
              !activeClauseElements.count(n.getOpaqueValue());
     });
     return culled;
@@ -379,23 +385,12 @@ private:
     return activeClauseElements;
   }
 
-  llvm::SmallVector<ASTNode, 0>
-  sortBySourceRange(ArrayRef<ASTNode> unordered) const {
+  std::vector<ASTNode> sortBySourceRange(ArrayRef<ASTNode> unordered) const {
     auto compareNodes = [&](const ASTNode n1, const ASTNode n2) {
-      // In general, we sort by start location so the the child scopes
-      // are created in source order.
-      // However, any VarDecls must come after the corresponding
-      // PatternBindingDecls so that those VarDecls get processed without the
-      // PBDs and are not rejected as duplicates.
-      if (n1.getStartLoc() == n2.getStartLoc()) {
-        if (isVarDeclInPatternBindingDecl(n1, n2))
-          return false; // d2 comes first
-        return true;    // d1 comes first
-      }
       return isNotAfter(n1, n2);
     };
 
-    llvm::SmallVector<ASTNode, 0> sorted;
+    std::vector<ASTNode> sorted;
     llvm::copy(unordered, std::back_inserter(sorted));
     std::stable_sort(sorted.begin(), sorted.end(), compareNodes);
     return sorted;
@@ -408,7 +403,7 @@ private:
     const int startOrder = cmpLoc(n1.getStartLoc(), n2.getStartLoc());
     const int endOrder = cmpLoc(n1.getEndLoc(), n2.getEndLoc());
 
-    assert(startOrder * endOrder != -1 && "Cannot process overlapping nodes");
+    assert(startOrder * endOrder != -1 && "Start order contradicts end order");
     return startOrder + endOrder < 1;
   }
 
@@ -1421,9 +1416,6 @@ void AbstractFunctionBodyScope::expandBody(ScopeCreator &scopeCreator) {
 void GenericTypeOrExtensionScope::expandBody(ScopeCreator &) {}
 
 void IterableTypeScope::expandBody(ScopeCreator &scopeCreator) {
-  if (auto *e = dyn_cast<EnumDecl>(getDecl()))
-    if (getSourceManager().getLineNumber(e->getStartLoc()) == 1744)
-      llvm::errs() << "HERE";
   for (auto n : scopeCreator.sortAndCullElementsOrMembers(
            getIterableDeclContext().get()->getMembers()))
     scopeCreator.createScopeFor(n, this);
@@ -1676,7 +1668,7 @@ private:
     auto f = SM.getIdentifierForBuffer(bufID);
     auto lin = SM.getLineNumber(loc);
     if (f.endswith(file) && lin == line)
-      llvm::errs() << "HERE " << lin << "\n";
+      llvm::errs() << "HERE catchForDebugging" << lin << "\n";
   }
 };
 } // end namespace
