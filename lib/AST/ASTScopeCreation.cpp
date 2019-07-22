@@ -913,15 +913,8 @@ GenericTypeOrExtensionScope::expandAScopeThatCreatesANewInsertionPoint(
 
 ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  // TODO: remove the sort after performing rdar://53254395
-  llvm::SmallVector<ASTNode, 0> sortedElements{stmt->getElements().begin(),
-                                               stmt->getElements().end()};
-  SourceManager &SM = getSourceManager();
-  std::stable_sort(sortedElements.begin(), sortedElements.end(),
-                   [&](ASTNode n1, ASTNode n2) {
-                     return SM.isBeforeInBuffer(n1.getEndLoc(), n2.getEndLoc());
-                   });
-  return scopeCreator.addScopesToTree(this, sortedElements);
+  return scopeCreator.addScopesToTree(this,
+                                      getElementsInSourceOrder(scopeCreator));
 }
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
@@ -1395,6 +1388,19 @@ static bool isVarDeclInPatternBindingDecl(const Decl *const d1,
       return vd->getParentPatternBinding() == pbd;
   }
   return false;
+}
+
+llvm::SmallVector<ASTNode, 0>
+BraceStmtScope::getElementsInSourceOrder(ScopeCreator &scopeCreator) const {
+  // TODO: remove the sort after performing rdar://53254395
+  llvm::SmallVector<ASTNode, 0> sortedElements{stmt->getElements().begin(),
+                                               stmt->getElements().end()};
+  SourceManager &SM = getSourceManager();
+  std::stable_sort(sortedElements.begin(), sortedElements.end(),
+                   [&](ASTNode n1, ASTNode n2) {
+                     return SM.isBeforeInBuffer(n1.getEndLoc(), n2.getEndLoc());
+                   });
+  return sortedElements;
 }
 
 std::vector<Decl *> IterableTypeScope::getMembersInSourceOrder(

@@ -1753,6 +1753,7 @@ protected:
 
 private:
   ASTScopeImpl *expandAScopeThatCreatesANewInsertionPoint(ScopeCreator &);
+  llvm::SmallVector<ASTNode, 0> getElementsInSourceOrder(ScopeCreator &) const;
 
 public:
   std::string getClassName() const override;
