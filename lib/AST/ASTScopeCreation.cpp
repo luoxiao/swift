@@ -962,8 +962,8 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   }
   // Create scope for the body.
   // We create body scopes when there is no body for source kit to complete
-  // erroneous code in bodies.
-  if (decl->getBodySourceRange().isValid()) {
+  // erroneous code in bodies. But don't let compiler synthesize one.
+  if (decl->getBody(false) && decl->getBodySourceRange().isValid()) {
     if (AbstractFunctionBodyScope::isAMethod(decl))
       scopeCreator.createSubtree<MethodBodyScope>(leaf, decl);
     else
@@ -1647,7 +1647,7 @@ private:
       record(entry.getInitContext());
   }
 
-  void catchForDebugging(Decl *D, const char *file, const int line) {
+  void catchForDebugging(Decl *D, const char *file, const unsigned line) {
     auto &SM = D->getASTContext().SourceMgr;
     auto loc = D->getStartLoc();
     if (!loc.isValid())
@@ -1655,9 +1655,8 @@ private:
     auto bufID = SM.findBufferContainingLoc(loc);
     auto f = SM.getIdentifierForBuffer(bufID);
     auto lin = SM.getLineNumber(loc);
-    if (f.endswith(file) /*&& lin == line*/)
+    if (f.endswith(file) && lin == line)
       llvm::errs() << "HERE " << lin << "\n";
-    ;
   }
 };
 } // end namespace
