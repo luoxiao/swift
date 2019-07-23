@@ -322,7 +322,7 @@ public:
     return s;
   }
 
-  void addChildrenForAllLocalizableAccessors(AbstractStorageDecl *asd,
+  void addChildrenForAllLocalizableAccessorsInSourceOrder(AbstractStorageDecl *asd,
                                              ASTScopeImpl *parent);
 
   void
@@ -788,20 +788,29 @@ NullablePtr<ASTScopeImpl> ScopeCreator::createScopeFor(ASTNode n,
   return ASTVisitorForScopeCreation().visit(p, parent, *this);
 }
 
-void ScopeCreator::addChildrenForAllLocalizableAccessors(
-    AbstractStorageDecl *asd, ASTScopeImpl *parent) {
-  // Sort in order to include synthesized ones, which are out of order.
+void ScopeCreator::addChildrenForAllLocalizableAccessorsInSourceOrder(
+                                                                      AbstractStorageDecl *asd, ASTScopeImpl *parent) {
+  //  auto  &SM = ctx.SourceMgr;
+  //  auto file = SM.getIdentifierForBuffer(SM.findBufferContainingLoc(parent->getSourceRange().Start));
+  //  auto line = SM.getLineNumber(parent->getSourceRange().Start);
+  //  bool dumpEm = file.endswith("ArrayBody.swift")  &&  line == 51;
+  //
+  
+  // Accessors are always nested within their abstract storage
+  // declaration. The nesting may not be immediate, because subscripts may
+  // have intervening scopes for generics.
+  AbstractStorageDecl *const enclosingAbstractStorageDecl = parent->getEnclosingAbstractStorageDecl().get();
+  
+  std::vector <AccessorDecl*> accessorsToScope;
   // Assume we don't have to deal with inactive clauses of IfConfigs here
-  for (auto *accessor : asd->getAllAccessors()) {
-    if (!AbstractFunctionDeclScope::shouldCreateAccessorScope(accessor))
-      continue;
-    // Accessors are always nested within their abstract storage
-    // declaration. The nesting may not be immediate, because subscripts may
-    // have intervening scopes for generics.
-    if (parent->getEnclosingAbstractStorageDecl() == accessor->getStorage()) {
-      ASTVisitorForScopeCreation().visitAbstractFunctionDecl(accessor, parent,
-                                                             *this);
-    }
+  llvm::copy_if(asd->getAllAccessors(), std::back_inserter(accessorsToScope),
+    [&](AccessorDecl *ad) { return isLocalizable(*ad) && enclosingAbstractStorageDecl == ad->getStorage(); });
+
+  // Sort in order to include synthesized ones, which are out of order.
+  // TODO: rm extra copy
+  for (auto *accessor : sortBySourceRange(accessorsToScope)) {
+    ASTVisitorForScopeCreation().visitAbstractFunctionDecl(accessor, parent,
+                                                           *this);
   }
 }
 
@@ -1158,7 +1167,7 @@ void CaseStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
 
 void VarDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     ScopeCreator &scopeCreator) {
-  scopeCreator.addChildrenForAllLocalizableAccessors(decl, this);
+  scopeCreator.addChildrenForAllLocalizableAccessorsInSourceOrder(decl, this);
 }
 
 void SubscriptDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
@@ -1168,7 +1177,7 @@ void SubscriptDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
       scopeCreator.createGenericParamScopes(sub, sub->getGenericParams(), this);
   auto *params = scopeCreator.createSubtree<ParameterListScope>(
       leaf, sub->getIndices(), sub->getGetter());
-  scopeCreator.addChildrenForAllLocalizableAccessors(sub, params);
+  scopeCreator.addChildrenForAllLocalizableAccessorsInSourceOrder(sub, params);
 }
 
 void WholeClosureScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
@@ -1316,8 +1325,7 @@ AbstractPatternEntryScope::AbstractPatternEntryScope(
 void AbstractPatternEntryScope::forEachVarDeclWithLocalizableAccessors(
     ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const {
   getPatternEntry().getPattern()->forEachVariable([&](VarDecl *var) {
-    if (llvm::any_of(var->getAllAccessors(),
-                     AbstractFunctionDeclScope::shouldCreateAccessorScope))
+    if (llvm::any_of(var->getAllAccessors(), [&](AccessorDecl *a) {return isLocalizable(*a); }))
       foundOne(var);
   });
 }
