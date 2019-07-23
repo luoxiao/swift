@@ -322,13 +322,14 @@ public:
     return s;
   }
 
-  void addChildrenForAllLocalizableAccessorsInSourceOrder(AbstractStorageDecl *asd,
-                                             ASTScopeImpl *parent);
+  void
+  addChildrenForAllLocalizableAccessorsInSourceOrder(AbstractStorageDecl *asd,
+                                                     ASTScopeImpl *parent);
 
   void
   forEachSpecializeAttrInSourceOrder(Decl *declBeingSpecialized,
                                      function_ref<void(SpecializeAttr *)> fn) {
-    std::vector<SpecializeAttr*> sortedSpecializeAttrs;
+    std::vector<SpecializeAttr *> sortedSpecializeAttrs;
     for (auto *attr : declBeingSpecialized->getAttrs()) {
       if (auto *specializeAttr = dyn_cast<SpecializeAttr>(attr))
         sortedSpecializeAttrs.push_back(specializeAttr);
@@ -381,14 +382,15 @@ private:
   }
 
   template <typename Rangeable>
-  std::vector<Rangeable> sortBySourceRange(std::vector<Rangeable> toBeSorted) const {
+  std::vector<Rangeable>
+  sortBySourceRange(std::vector<Rangeable> toBeSorted) const {
     auto compareNodes = [&](Rangeable n1, Rangeable n2) {
       return isNotAfter(n1, n2);
     };
     std::stable_sort(toBeSorted.begin(), toBeSorted.end(), compareNodes);
     return toBeSorted;
   }
-  
+
   template <typename Rangeable>
   static SourceRange getRangeableSourceRange(const Rangeable *const p) {
     return p->getSourceRange();
@@ -397,10 +399,10 @@ private:
   static SourceRange getRangeableSourceRange(Rangeable *const p) {
     return p->getSourceRange();
   }
-  static SourceRange getRangeableSourceRange( SpecializeAttr *a) {
+  static SourceRange getRangeableSourceRange(SpecializeAttr *a) {
     return a->getRange();
   }
-   static SourceRange getRangeableSourceRange( const SpecializeAttr *a) {
+  static SourceRange getRangeableSourceRange(const SpecializeAttr *a) {
     return a->getRange();
   }
   static SourceRange getRangeableSourceRange(const ASTNode n) {
@@ -789,22 +791,27 @@ NullablePtr<ASTScopeImpl> ScopeCreator::createScopeFor(ASTNode n,
 }
 
 void ScopeCreator::addChildrenForAllLocalizableAccessorsInSourceOrder(
-                                                                      AbstractStorageDecl *asd, ASTScopeImpl *parent) {
+    AbstractStorageDecl *asd, ASTScopeImpl *parent) {
   //  auto  &SM = ctx.SourceMgr;
-  //  auto file = SM.getIdentifierForBuffer(SM.findBufferContainingLoc(parent->getSourceRange().Start));
+  //  auto file =
+  //  SM.getIdentifierForBuffer(SM.findBufferContainingLoc(parent->getSourceRange().Start));
   //  auto line = SM.getLineNumber(parent->getSourceRange().Start);
   //  bool dumpEm = file.endswith("ArrayBody.swift")  &&  line == 51;
   //
-  
+
   // Accessors are always nested within their abstract storage
   // declaration. The nesting may not be immediate, because subscripts may
   // have intervening scopes for generics.
-  AbstractStorageDecl *const enclosingAbstractStorageDecl = parent->getEnclosingAbstractStorageDecl().get();
-  
-  std::vector <AccessorDecl*> accessorsToScope;
+  AbstractStorageDecl *const enclosingAbstractStorageDecl =
+      parent->getEnclosingAbstractStorageDecl().get();
+
+  std::vector<AccessorDecl *> accessorsToScope;
   // Assume we don't have to deal with inactive clauses of IfConfigs here
   llvm::copy_if(asd->getAllAccessors(), std::back_inserter(accessorsToScope),
-    [&](AccessorDecl *ad) { return isLocalizable(*ad) && enclosingAbstractStorageDecl == ad->getStorage(); });
+                [&](AccessorDecl *ad) {
+                  return isLocalizable(*ad) &&
+                         enclosingAbstractStorageDecl == ad->getStorage();
+                });
 
   // Sort in order to include synthesized ones, which are out of order.
   // TODO: rm extra copy
@@ -958,7 +965,7 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
   if (patternEntry.getInitAsWritten() &&
       isLocalizable(*patternEntry.getInitAsWritten())) {
     scopeCreator.createSubtree<PatternEntryInitializerScope>(
-       this, decl, patternEntryIndex, vis);
+        this, decl, patternEntryIndex, vis);
   }
   // Add accessors for the variables in this pattern.
 
@@ -1325,7 +1332,8 @@ AbstractPatternEntryScope::AbstractPatternEntryScope(
 void AbstractPatternEntryScope::forEachVarDeclWithLocalizableAccessors(
     ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const {
   getPatternEntry().getPattern()->forEachVariable([&](VarDecl *var) {
-    if (llvm::any_of(var->getAllAccessors(), [&](AccessorDecl *a) {return isLocalizable(*a); }))
+    if (llvm::any_of(var->getAllAccessors(),
+                     [&](AccessorDecl *a) { return isLocalizable(*a); }))
       foundOne(var);
   });
 }
