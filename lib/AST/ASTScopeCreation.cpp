@@ -328,17 +328,12 @@ public:
   void
   forEachSpecializeAttrInSourceOrder(Decl *declBeingSpecialized,
                                      function_ref<void(SpecializeAttr *)> fn) {
-    SmallVector<SpecializeAttr *, 8> sortedSpecializeAttrs;
+    std::vector<SpecializeAttr*> sortedSpecializeAttrs;
     for (auto *attr : declBeingSpecialized->getAttrs()) {
       if (auto *specializeAttr = dyn_cast<SpecializeAttr>(attr))
         sortedSpecializeAttrs.push_back(specializeAttr);
     }
-    const auto &srcMgr = declBeingSpecialized->getASTContext().SourceMgr;
-    std::sort(sortedSpecializeAttrs.begin(), sortedSpecializeAttrs.end(),
-              [&](const SpecializeAttr *a, const SpecializeAttr *b) {
-                return srcMgr.isBeforeInBuffer(a->getLocation(),
-                                               b->getLocation());
-              });
+    sortBySourceRange(sortedSpecializeAttrs);
     for (auto *specializeAttr : sortedSpecializeAttrs)
       fn(specializeAttr);
   }
@@ -385,23 +380,42 @@ private:
     return activeClauseElements;
   }
 
-  std::vector<ASTNode> sortBySourceRange(ArrayRef<ASTNode> unordered) const {
-    auto compareNodes = [&](const ASTNode n1, const ASTNode n2) {
+  template <typename Rangeable>
+  std::vector<Rangeable> sortBySourceRange(std::vector<Rangeable> toBeSorted) const {
+    auto compareNodes = [&](Rangeable n1, Rangeable n2) {
       return isNotAfter(n1, n2);
     };
-
-    std::vector<ASTNode> sorted;
-    llvm::copy(unordered, std::back_inserter(sorted));
-    std::stable_sort(sorted.begin(), sorted.end(), compareNodes);
-    return sorted;
+    std::stable_sort(toBeSorted.begin(), toBeSorted.end(), compareNodes);
+    return toBeSorted;
+  }
+  
+  template <typename Rangeable>
+  static SourceRange getRangeableSourceRange(const Rangeable *const p) {
+    return p->getSourceRange();
+  }
+  template <typename Rangeable>
+  static SourceRange getRangeableSourceRange(Rangeable *const p) {
+    return p->getSourceRange();
+  }
+  static SourceRange getRangeableSourceRange( SpecializeAttr *a) {
+    return a->getRange();
+  }
+   static SourceRange getRangeableSourceRange( const SpecializeAttr *a) {
+    return a->getRange();
+  }
+  static SourceRange getRangeableSourceRange(const ASTNode n) {
+    return n.getSourceRange();
   }
 
-  bool isNotAfter(ASTNode n1, ASTNode n2) const {
+  template <typename Rangeable>
+  bool isNotAfter(Rangeable n1, Rangeable n2) const {
     auto cmpLoc = [&](const SourceLoc l1, const SourceLoc l2) {
       return l1 == l2 ? 0 : ctx.SourceMgr.isBeforeInBuffer(l1, l2) ? -1 : 1;
     };
-    const int startOrder = cmpLoc(n1.getStartLoc(), n2.getStartLoc());
-    const int endOrder = cmpLoc(n1.getEndLoc(), n2.getEndLoc());
+    const auto r1 = getRangeableSourceRange(n1);
+    const auto r2 = getRangeableSourceRange(n2);
+    const int startOrder = cmpLoc(r1.Start, r2.Start);
+    const int endOrder = cmpLoc(r1.End, r2.End);
 
     assert(startOrder * endOrder != -1 && "Start order contradicts end order");
     return startOrder + endOrder < 1;
@@ -776,16 +790,19 @@ NullablePtr<ASTScopeImpl> ScopeCreator::createScopeFor(ASTNode n,
 
 void ScopeCreator::addChildrenForAllLocalizableAccessors(
     AbstractStorageDecl *asd, ASTScopeImpl *parent) {
+  // Sort in order to include synthesized ones, which are out of order.
+  // Assume we don't have to deal with inactive clauses of IfConfigs here
   for (auto *accessor : asd->getAllAccessors()) {
     if (!AbstractFunctionDeclScope::shouldCreateAccessorScope(accessor))
       continue;
     // Accessors are always nested within their abstract storage
     // declaration. The nesting may not be immediate, because subscripts may
     // have intervening scopes for generics.
-    if (parent->getEnclosingAbstractStorageDecl() == accessor->getStorage())
+    if (parent->getEnclosingAbstractStorageDecl() == accessor->getStorage()) {
       ASTVisitorForScopeCreation().visitAbstractFunctionDecl(accessor, parent,
                                                              *this);
     }
+  }
 }
 
 #pragma mark creation helpers
@@ -931,9 +948,8 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
   // we cannot make a scope for it, since no source range.
   if (patternEntry.getInitAsWritten() &&
       isLocalizable(*patternEntry.getInitAsWritten())) {
-    auto *initializer =
-        scopeCreator.createSubtree<PatternEntryInitializerScope>(
-            this, decl, patternEntryIndex, vis);
+    scopeCreator.createSubtree<PatternEntryInitializerScope>(
+       this, decl, patternEntryIndex, vis);
   }
   // Add accessors for the variables in this pattern.
 
@@ -1621,7 +1637,7 @@ public:
   }
 
   bool walkToDeclPre(Decl *D) override {
-    catchForDebugging(D, "DictionaryBridging.swift", 694);
+    //    catchForDebugging(D, "DictionaryBridging.swift", 694);
     if (const auto *dc = dyn_cast<DeclContext>(D))
       record(dc);
     if (auto *icd =
