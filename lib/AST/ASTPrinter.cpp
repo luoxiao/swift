@@ -3374,7 +3374,11 @@ void Decl::print(raw_ostream &OS, const PrintOptions &Opts) const {
 
 bool Decl::print(ASTPrinter &Printer, const PrintOptions &Opts) const {
   PrintAST printer(Printer, Opts);
-  return printer.visit(const_cast<Decl *>(this));
+  auto easl = getASTContext().LangOpts.EnableASTScopeLookup;
+  getASTContext().LangOpts.EnableASTScopeLookup = false;
+  auto r = printer.visit(const_cast<Decl *>(this));
+  getASTContext().LangOpts.EnableASTScopeLookup = easl;
+  return r;
 }
 
 bool Decl::shouldPrintInContext(const PrintOptions &PO) const {
