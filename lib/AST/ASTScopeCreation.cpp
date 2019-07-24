@@ -725,8 +725,18 @@ public:
   NullablePtr<ASTScopeImpl> visitIfConfigDecl(IfConfigDecl *icd,
                                               ASTScopeImpl *p,
                                               ScopeCreator &scopeCreator) {
-    llvm_unreachable("Should be handled inside of "
-                     "expandInactiveClausesSortAndCullElementsOrMembers");
+    // Should only get here if this IfConfigDecl is nested in another one,
+    // in an inactive clause.
+    // I.e., indirectly from addNodesToTree
+    // Thus, can freely expand it.
+    std::vector<ASTNode> nodes;
+    for (auto &clause : icd->getClauses()) {
+      assert(!clause.isActive);
+      // Generate scopes for any closures in the condition
+      nodes.push_back(clause.Cond);
+      llvm::copy(clause.Elements, std::back_inserter(nodes));
+    }
+    return scopeCreator.addNodesToTree(p, nodes);
   }
 
   NullablePtr<ASTScopeImpl> visitReturnStmt(ReturnStmt *rs, ASTScopeImpl *p,
