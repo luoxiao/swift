@@ -52,6 +52,12 @@ static bool isLocalizable(const Rangeable astElement) {
   return getRangeableSourceRange(astElement).isValid();
 }
 
+static std::vector<ASTNode> asNodeVector(DeclRange dr) {
+  std::vector<ASTNode> nodes;
+  llvm::transform(dr, std::back_inserter(nodes),
+                  [&](Decl *d) { return ASTNode(d); });
+  return nodes;
+}
 
 namespace swift {
 namespace ast_scope {
@@ -142,13 +148,12 @@ public:
 public:
   /// Given an array of ASTNodes or Decl pointers, add them
   /// Return the resultant insertionPoint
-  /// Use a template in order to be able to pass in either an array of ASTNodes
-  /// or an array of Decl*s.
-  template <typename ArrayOfNodesOrDeclPtrs>
-  ASTScopeImpl *addScopesToTree(ASTScopeImpl *const insertionPoint,
-                                ArrayOfNodesOrDeclPtrs nodesOrDeclsToAdd) {
+  ASTScopeImpl *addNodesToTree(ASTScopeImpl *const insertionPoint,
+                               ArrayRef<ASTNode> nodesOrDeclsToAdd) {
+
     auto *ip = insertionPoint;
-    for (auto nd : nodesOrDeclsToAdd) {
+    for (auto nd :
+         expandInactiveClausesSortAndCullElementsOrMembers(nodesOrDeclsToAdd)) {
       if (shouldThisNodeBeScopedWhenEncountered(nd))
         ip = createScopeFor(nd, ip).getPtrOr(ip);
       else
@@ -350,19 +355,46 @@ public:
       fn(specializeAttr);
   }
 
-  std::vector<ASTNode> sortAndCullElementsOrMembers(DeclRange decls) {
-    std::vector<ASTNode> nodes;
-    std::transform(decls.begin(), decls.end(), std::back_inserter(nodes),
-                   [&](Decl *d) { return ASTNode(d); });
-    return sortAndCullElementsOrMembers(nodes);
-  }
-
-  std::vector<ASTNode>
-  sortAndCullElementsOrMembers(ArrayRef<ASTNode> input) const {
-    return sortBySourceRange(cull(input));
+  std::vector<ASTNode> expandInactiveClausesSortAndCullElementsOrMembers(
+      ArrayRef<ASTNode> input) const {
+    return sortBySourceRange(cull(expandInactiveClauses(input)));
   }
 
 private:
+  /// IfConfigs pose a challenge because we need to field lookups into the
+  /// inactive clauses, but the AST contains redundancy: the active clause's
+  /// elements are present in the members or elements of an IterableTypeDecl or
+  /// BraceStmt alongside of the IfConfigDecl. In addition there are two more
+  /// complications:
+  ///
+  /// 1. The active clause's elements may be nested inside an init self
+  /// rebinding decl (as in StringObject.self).
+  ///
+  /// 2. The active clause may be before or after the inactive ones
+  ///
+  /// So, when encountering an IfConfigDecl, expand only the inactive elements.
+  /// Also, always sort members or elements so that the child scopes are in
+  /// source order (Just one of several reasons we need to sort.)
+  static std::vector<ASTNode> expandInactiveClauses(ArrayRef<ASTNode> input) {
+    std::vector<ASTNode> expansion;
+    // Generate scopes for each clause
+    // Include active clause because of culling.
+    for (auto n : input) {
+      if (!n.isDecl(DeclKind::IfConfig)) {
+        expansion.push_back(n);
+        continue;
+      }
+      auto *icd = cast<IfConfigDecl>(n.get<Decl *>());
+      for (auto &clause : icd->getClauses()) {
+        if (auto *cond = clause.Cond)
+          expansion.push_back(cond);
+        if (!clause.isActive)
+          llvm::copy(clause.Elements, std::back_inserter(expansion));
+      }
+    }
+    return expansion;
+  }
+
   /// Remove VarDecls because we'll find them when we expand the
   /// PatternBindingDecls. Remove AccessorDecls because they overlap & we'll
   /// find them when we expand the subscripts and var decls. Remove EnunCases
@@ -375,18 +407,6 @@ private:
              !n.isDecl(DeclKind::Accessor) && !n.isDecl(DeclKind::EnumCase);
     });
     return culled;
-  }
-
-  std::unordered_set<void*>
-  collectElementsOfActiveClauses(ArrayRef<ASTNode> input) const {
-    std::unordered_set<void*> activeClauseElements;
-    for (ASTNode n : input)
-      if (auto *d = n.dyn_cast<Decl *>())
-        if (auto *ifc = dyn_cast<IfConfigDecl>(d))
-          if (auto *ac = ifc->getActiveClause())
-            for (auto n : ac->Elements)
-              activeClauseElements.insert(n.getOpaqueValue());
-    return activeClauseElements;
   }
 
   template <typename Rangeable>
@@ -518,11 +538,8 @@ void ASTSourceFileScope::addNewDeclsToTree() {
   assert(SF && scopeCreator);
   ArrayRef<Decl *> decls = SF->Decls;
   ArrayRef<Decl *> newDecls = decls.slice(numberOfDeclsAlreadySeen);
-  // Save source range recalculation work if possible
-  if (newDecls.empty())
-    return;
-
-  insertionPoint = scopeCreator->addScopesToTree(insertionPoint, newDecls);
+  std::vector<ASTNode> newNodes(newDecls.begin(), newDecls.end());
+  insertionPoint = scopeCreator->addNodesToTree(insertionPoint, newNodes);
   numberOfDeclsAlreadySeen = SF->Decls.size();
 
   assert(scopeCreator->containsAllDeclContextsFromAST() &&
@@ -705,36 +722,11 @@ public:
     return p;
   }
 
-  /// IfConfigs pose a challenge because we need to field lookups into the
-  /// inactive clauses, but the AST contains redundancy: the active clause's
-  /// elements are present in the members or elements of an IterableTypeDecl or
-  /// BraceStmt alongside of the IfConfigDecl. In addition there are two more
-  /// complications:
-  ///
-  /// 1. The active clause's elements may be nested inside an init self
-  /// rebinding decl (as in StringObject.self).
-  ///
-  /// 2. The active clause may be before or after the inactive ones
-  ///
-  /// So, when encountering an IfConfigDecl, expand only the inactive elements.
-  /// Also, always sort members or elements so that the child scopes are in
-  /// source order (Just one of several reasons we need to sort.)
   NullablePtr<ASTScopeImpl> visitIfConfigDecl(IfConfigDecl *icd,
                                               ASTScopeImpl *p,
                                               ScopeCreator &scopeCreator) {
-    // Generate scopes for each clause
-    // Include active clause because of culling.
-    for (auto &clause : icd->getClauses()) {
-      // Generate scopes for any closures in the condition
-      visitExpr(clause.Cond, p, scopeCreator);
-      // First element in this clause will be under the enclosing scope
-      for (auto n :
-           scopeCreator.sortAndCullElementsOrMembers(clause.Elements)) {
-        if (!clause.isActive)
-          scopeCreator.createScopeFor(n, p);
-      }
-    }
-    return p;
+    llvm_unreachable("Should be handled inside of "
+                     "expandInactiveClausesSortAndCullElementsOrMembers");
   }
 
   NullablePtr<ASTScopeImpl> visitReturnStmt(ReturnStmt *rs, ASTScopeImpl *p,
@@ -1014,8 +1006,7 @@ GenericTypeOrExtensionScope::expandAScopeThatCreatesANewInsertionPoint(
 ASTScopeImpl *BraceStmtScope::expandAScopeThatCreatesANewInsertionPoint(
     ScopeCreator &scopeCreator) {
   // TODO: remove the sort after performing rdar://53254395
-  return scopeCreator.addScopesToTree(
-      this, scopeCreator.sortAndCullElementsOrMembers(stmt->getElements()));
+  return scopeCreator.addNodesToTree(this, stmt->getElements());
 }
 
 ASTScopeImpl *TopLevelCodeScope::expandAScopeThatCreatesANewInsertionPoint(
@@ -1440,8 +1431,9 @@ void AbstractFunctionBodyScope::expandBody(ScopeCreator &scopeCreator) {
 void GenericTypeOrExtensionScope::expandBody(ScopeCreator &) {}
 
 void IterableTypeScope::expandBody(ScopeCreator &scopeCreator) {
-  for (auto n : scopeCreator.sortAndCullElementsOrMembers(
-           getIterableDeclContext().get()->getMembers()))
+  // TODO: can we call addNodesToTree here instead of expand...?
+  for (auto n : scopeCreator.expandInactiveClausesSortAndCullElementsOrMembers(
+           asNodeVector(getIterableDeclContext().get()->getMembers())))
     scopeCreator.createScopeFor(n, this);
   explicitMemberCount =
       getIterableDeclContext().get()->getExplicitMemberCount();
