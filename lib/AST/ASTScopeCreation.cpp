@@ -377,8 +377,13 @@ private:
   /// source order (Just one of several reasons we need to sort.)
   static std::vector<ASTNode> expandInactiveClauses(ArrayRef<ASTNode> input) {
     std::vector<ASTNode> expansion;
-    // Generate scopes for each clause
-    // Include active clause because of culling.
+    expandInactiveClausesInto(expansion, input, /*isInAnActiveNode=*/true);
+    return expansion;
+  }
+
+  static void expandInactiveClausesInto(std::vector<ASTNode> &expansion,
+                                        ArrayRef<ASTNode> input,
+                                        bool isInAnActiveNode) {
     for (auto n : input) {
       if (!n.isDecl(DeclKind::IfConfig)) {
         expansion.push_back(n);
@@ -389,10 +394,14 @@ private:
         if (auto *cond = clause.Cond)
           expansion.push_back(cond);
         if (!clause.isActive)
-          llvm::copy(clause.Elements, std::back_inserter(expansion));
+          expandInactiveClausesInto(expansion, clause.Elements,
+                                    /*isInAnActiveNode=*/false);
+        else
+          assert(isInAnActiveNode && "Assume that clause is not marked "
+                                     "active unless it's context is "
+                                     "active");
       }
     }
-    return expansion;
   }
 
   /// Remove VarDecls because we'll find them when we expand the
@@ -725,18 +734,8 @@ public:
   NullablePtr<ASTScopeImpl> visitIfConfigDecl(IfConfigDecl *icd,
                                               ASTScopeImpl *p,
                                               ScopeCreator &scopeCreator) {
-    // Should only get here if this IfConfigDecl is nested in another one,
-    // in an inactive clause.
-    // I.e., indirectly from addNodesToTree
-    // Thus, can freely expand it.
-    std::vector<ASTNode> nodes;
-    for (auto &clause : icd->getClauses()) {
-      assert(!clause.isActive);
-      // Generate scopes for any closures in the condition
-      nodes.push_back(clause.Cond);
-      llvm::copy(clause.Elements, std::back_inserter(nodes));
-    }
-    return scopeCreator.addNodesToTree(p, nodes);
+    llvm_unreachable("Should be handled inside of "
+                     "expandInactiveClausesSortAndCullElementsOrMembers");
   }
 
   NullablePtr<ASTScopeImpl> visitReturnStmt(ReturnStmt *rs, ASTScopeImpl *p,
