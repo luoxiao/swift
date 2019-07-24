@@ -486,12 +486,10 @@ public:
         if (auto *d = p.first->getAsDecl()) {
           llvm::errs() << "\nASTScope tree omitted: " << p.first << ":\n";
           p.first->printContext(llvm::errs());
-          llvm::errs() << d << " implicit: " << d->isImplicit()
-                       << ", invalid: " << d->isInvalid() << " ";
-          d->getSourceRange().print(llvm::errs(), getASTContext().SourceMgr,
-                                    false);
-        llvm::errs() << "\n";
-        foundOmission = true;
+          llvm::errs() << "\n" << d << ": ";
+          d->dump(llvm::errs());
+          llvm::errs() << "\n";
+          foundOmission = true;
         }
         else {
           // If no decl, no source range, so no scope
