@@ -396,10 +396,16 @@ private:
         if (!clause.isActive)
           expandInactiveClausesInto(expansion, clause.Elements,
                                     /*isInAnActiveNode=*/false);
-        else
+        else {
           assert(isInAnActiveNode && "Assume that clause is not marked "
                                      "active unless it's context is "
                                      "active");
+          // get inactive nodes that nest in active clauses
+          for (auto n: clause.Elements)
+            if (auto *d = n.dyn_cast<Decl*>())
+              if (auto *icd = dyn_cast<IfConfigDecl>(d))
+                expandInactiveClausesInto(expansion, {d}, true);
+        }
       }
     }
   }
