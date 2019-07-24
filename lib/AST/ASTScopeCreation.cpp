@@ -476,8 +476,8 @@ public:
   /// Return true if scope tree contains all the decl contexts in the AST
   /// May modify the scope tree in order to update obsolete scopes.
   bool containsAllDeclContextsFromAST() {
-    auto allDeclContexts = findDeclContextsInAST();
-    llvm::DenseSet<const DeclContext *> bogusDCs;
+    auto allDeclContexts = findLocalizableDeclContextsInAST();
+    llvm::DenseMap<const DeclContext *, const ASTScopeImpl *> bogusDCs;
     sourceFileScope->preOrderDo(
         [&](ASTScopeImpl *scope) { scope->reexpandIfObsolete(*this); });
     sourceFileScope->postOrderDo([&](ASTScopeImpl *scope) {
@@ -486,36 +486,50 @@ public:
         if (iter != allDeclContexts.end())
           ++iter->second;
         else
-          bogusDCs.insert(dc);
+          bogusDCs.insert({dc, scope});
       }
     });
+
+    auto printDecl = [&](const Decl *d) {
+      llvm::errs() << "\ngetAsDecl() -> " << d << " ";
+      d->getSourceRange().dump(ctx.SourceMgr);
+      llvm::errs() << " : ";
+      d->dump(llvm::errs());
+      llvm::errs() << "\n";
+    };
     bool foundOmission = false;
     for (const auto &p : allDeclContexts) {
       if (p.second == 0) {
         if (auto *d = p.first->getAsDecl()) {
-          llvm::errs() << "\nASTScope tree omitted DeclContext: " << p.first
-                       << ":\n";
-          p.first->printContext(llvm::errs());
-          llvm::errs() << "\ngetAsDecl() -> " << d << ": ";
-          d->dump(llvm::errs());
-          llvm::errs() << "\n";
-          foundOmission = true;
+          if (isLocalizable(d)) {
+            llvm::errs() << "\nASTScope tree omitted DeclContext: " << p.first
+                         << " "
+                         << ":\n";
+            p.first->printContext(llvm::errs());
+            printDecl(d);
+            foundOmission = true;
+          }
         }
         else {
           // If no decl, no source range, so no scope
         }
       }
     }
-    for (const auto *dc : bogusDCs) {
-      llvm::errs() << "ASTScope tree confabulated: " << dc << ":\n";
-      dc->printContext(llvm::errs());
+    for (const auto dcAndScope : bogusDCs) {
+      llvm::errs() << "ASTScope tree confabulated: " << dcAndScope.getFirst()
+                   << ":\n";
+      dcAndScope.getFirst()->printContext(llvm::errs());
+      if (auto *d = dcAndScope.getFirst()->getAsDecl())
+        printDecl(d);
+      dcAndScope.getSecond()->dump();
     }
     return !foundOmission && bogusDCs.empty();
   }
 
 private:
   /// Return a map of every DeclContext in the AST, and zero in the 2nd element.
-  llvm::DenseMap<const DeclContext *, unsigned> findDeclContextsInAST() const;
+  llvm::DenseMap<const DeclContext *, unsigned>
+  findLocalizableDeclContextsInAST() const;
 
 public:
   void dump() const { print(llvm::errs()); }
@@ -1642,7 +1656,7 @@ bool AbstractFunctionDeclScope::shouldCreateAccessorScope(
 #pragma mark verification
 
 namespace {
-class ASTCollector : public ASTWalker {
+class LocalizableDeclContextCollector : public ASTWalker {
 
 public:
   llvm::DenseMap<const DeclContext *, unsigned> declContexts;
@@ -1665,6 +1679,9 @@ public:
       record(pd->getDefaultArgumentInitContext());
     else if (auto *pbd = dyn_cast<PatternBindingDecl>(D))
       recordInitializers(pbd);
+    else if (auto *vd = dyn_cast<VarDecl>(D))
+      for (auto *ad : vd->getAllAccessors())
+        ad->walk(*this);
     return ASTWalker::walkToDeclPre(D);
   }
 
@@ -1699,14 +1716,15 @@ private:
     auto f = SM.getIdentifierForBuffer(bufID);
     auto lin = SM.getLineNumber(loc);
     if (f.endswith(file) && lin == line)
-      llvm::errs() << "HERE catchForDebugging: " << lin << "\n";
+      if (auto *v = dyn_cast<PatternBindingDecl>(D))
+        llvm::errs() << "HERE catchForDebugging: " << lin << "\n";
   }
 };
 } // end namespace
 
 llvm::DenseMap<const DeclContext *, unsigned>
-ScopeCreator::findDeclContextsInAST() const {
-  ASTCollector collector;
+ScopeCreator::findLocalizableDeclContextsInAST() const {
+  LocalizableDeclContextCollector collector;
   sourceFileScope->SF->walk(collector);
   // Walker omits the top
   collector.record(sourceFileScope->SF);
