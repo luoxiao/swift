@@ -363,7 +363,6 @@ public:
   }
 
 private:
-  /// Remove active clauses because we'll expand all clauses of ifConfigs.
   /// Remove VarDecls because we'll find them when we expand the
   /// PatternBindingDecls. Remove AccessorDecls because they overlap & we'll
   /// find them when we expand the subscripts and var decls. Remove EnunCases
@@ -371,11 +370,9 @@ private:
   /// members.
   std::vector<ASTNode> cull(ArrayRef<ASTNode> input) const {
     std::vector<ASTNode> culled;
-    auto activeClauseElements = collectElementsOfActiveClauses(input);
     llvm::copy_if(input, std::back_inserter(culled), [&](ASTNode n) {
       return isLocalizable(n) && !n.isDecl(DeclKind::Var) &&
-             !n.isDecl(DeclKind::Accessor) && !n.isDecl(DeclKind::EnumCase) &&
-             !activeClauseElements.count(n.getOpaqueValue());
+             !n.isDecl(DeclKind::Accessor) && !n.isDecl(DeclKind::EnumCase);
     });
     return culled;
   }
@@ -708,33 +705,36 @@ public:
     return p;
   }
 
+  /// IfConfigs pose a challenge because we need to field lookups into the
+  /// inactive clauses, but the AST contains redundancy: the active clause's
+  /// elements are present in the members or elements of an IterableTypeDecl or
+  /// BraceStmt alongside of the IfConfigDecl. In addition there are two more
+  /// complications:
+  ///
+  /// 1. The active clause's elements may be nested inside an init self
+  /// rebinding decl (as in StringObject.self).
+  ///
+  /// 2. The active clause may be before or after the inactive ones
+  ///
+  /// So, when encountering an IfConfigDecl, expand only the inactive elements.
+  /// Also, always sort members or elements so that the child scopes are in
+  /// source order (Just one of several reasons we need to sort.)
   NullablePtr<ASTScopeImpl> visitIfConfigDecl(IfConfigDecl *icd,
                                               ASTScopeImpl *p,
                                               ScopeCreator &scopeCreator) {
-    auto *activeClauseLookupParent = p;
     // Generate scopes for each clause
     // Include active clause because of culling.
     for (auto &clause : icd->getClauses()) {
       // Generate scopes for any closures in the condition
       visitExpr(clause.Cond, p, scopeCreator);
       // First element in this clause will be under the enclosing scope
-      auto *insertionPointForThisClause = p;
       for (auto n :
            scopeCreator.sortAndCullElementsOrMembers(clause.Elements)) {
-        // Or maybe skip active clause?? No, source order.
-        insertionPointForThisClause =
-            scopeCreator.createScopeFor(n, insertionPointForThisClause)
-                .getPtrOr(insertionPointForThisClause);
-      }
-      // Remember the insertionPoint/lookupParent of the active clause
-      if (clause.isActive) {
-        assert(activeClauseLookupParent == p && ">1 active clause?!");
-        activeClauseLookupParent = insertionPointForThisClause;
+        if (!clause.isActive)
+          scopeCreator.createScopeFor(n, p);
       }
     }
-    // Subsequent decls, etc. must inherit lookup from the active clause
-    return scopeCreator.createSubtree<LookupParentDiversionScope>(
-        p, activeClauseLookupParent, icd->getEndLoc());
+    return p;
   }
 
   NullablePtr<ASTScopeImpl> visitReturnStmt(ReturnStmt *rs, ASTScopeImpl *p,
