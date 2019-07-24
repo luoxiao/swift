@@ -35,10 +35,28 @@
 using namespace swift;
 using namespace ast_scope;
 
+#pragma mark source range utilities
+template <typename Rangeable>
+static SourceRange getRangeableSourceRange(const Rangeable *const p) {
+  return p->getSourceRange();
+}
+template <typename Rangeable>
+static SourceRange getRangeableSourceRange(Rangeable *const p) {
+  return p->getSourceRange();
+}
+static SourceRange getRangeableSourceRange(SpecializeAttr *a) {
+  return a->getRange();
+}
+static SourceRange getRangeableSourceRange(const SpecializeAttr *a) {
+  return a->getRange();
+}
+static SourceRange getRangeableSourceRange(const ASTNode n) {
+  return n.getSourceRange();
+}
 
-template <typename T>
-static bool isLocalizable(const T& astElement) {
-  return astElement.getStartLoc().isValid();
+template <typename Rangeable>
+static bool isLocalizable(const Rangeable astElement) {
+  return getRangeableSourceRange(astElement).isValid();
 }
 
 
@@ -165,7 +183,7 @@ public:
 
     auto *const d = n.get<Decl *>();
     // Implicit nodes may not have source information for name lookup.
-    if (!isLocalizable(*d))
+    if (!isLocalizable(d))
       return false;
     /// In \c Parser::parseDeclVarGetSet fake PBDs are created. Ignore them.
     /// Example:
@@ -178,7 +196,7 @@ public:
     // In that test the invalid PBD -> var decl which contains the desired
     // closure scope
     //    if (const auto *PBD = dyn_cast<PatternBindingDecl>(d))
-    //      if (!isLocalizable(*PBD))
+    //      if (!isLocalizable(PBD))
     //        return false;
     /// In
     /// \code
@@ -389,24 +407,6 @@ private:
     };
     std::stable_sort(toBeSorted.begin(), toBeSorted.end(), compareNodes);
     return toBeSorted;
-  }
-
-  template <typename Rangeable>
-  static SourceRange getRangeableSourceRange(const Rangeable *const p) {
-    return p->getSourceRange();
-  }
-  template <typename Rangeable>
-  static SourceRange getRangeableSourceRange(Rangeable *const p) {
-    return p->getSourceRange();
-  }
-  static SourceRange getRangeableSourceRange(SpecializeAttr *a) {
-    return a->getRange();
-  }
-  static SourceRange getRangeableSourceRange(const SpecializeAttr *a) {
-    return a->getRange();
-  }
-  static SourceRange getRangeableSourceRange(const ASTNode n) {
-    return n.getSourceRange();
   }
 
   template <typename Rangeable>
@@ -809,7 +809,7 @@ void ScopeCreator::addChildrenForAllLocalizableAccessorsInSourceOrder(
   // Assume we don't have to deal with inactive clauses of IfConfigs here
   llvm::copy_if(asd->getAllAccessors(), std::back_inserter(accessorsToScope),
                 [&](AccessorDecl *ad) {
-                  return isLocalizable(*ad) &&
+                  return isLocalizable(ad) &&
                          enclosingAbstractStorageDecl == ad->getStorage();
                 });
 
@@ -963,7 +963,7 @@ ASTScopeImpl *PatternEntryDeclScope::expandAScopeThatCreatesANewInsertionPoint(
   // Even if this predicate fails, there may be an initContext but
   // we cannot make a scope for it, since no source range.
   if (patternEntry.getInitAsWritten() &&
-      isLocalizable(*patternEntry.getInitAsWritten())) {
+      isLocalizable(patternEntry.getInitAsWritten())) {
     scopeCreator.createSubtree<PatternEntryInitializerScope>(
         this, decl, patternEntryIndex, vis);
   }
@@ -1059,7 +1059,7 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   if (!isa<AccessorDecl>(decl)) {
     leaf = scopeCreator.createGenericParamScopes(decl, decl->getGenericParams(),
                                                  leaf);
-    if (isLocalizable(*decl) && getParamsSourceLoc(decl).isValid()) {
+    if (isLocalizable(decl) && getParamsSourceLoc(decl).isValid()) {
       leaf = scopeCreator.createSubtree<ParameterListScope>(
           leaf, decl->getParameters(), nullptr);
     }
@@ -1129,7 +1129,7 @@ void SwitchStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
                                          scopeCreator);
 
   for (auto caseStmt : stmt->getCases()) {
-    if (isLocalizable(*caseStmt))
+    if (isLocalizable(caseStmt))
       scopeCreator.createSubtreeIfUnique<CaseStmtScope>(this, caseStmt);
   }
 }
@@ -1144,7 +1144,7 @@ void ForEachStmtScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
   //    let v: C { for b : Int -> S((array: P { }
   // the body is implicit and it would overlap the source range of the expr
   // above.
-  if (isLocalizable(*stmt->getBody()))
+  if (isLocalizable(stmt->getBody()))
     scopeCreator.createSubtree<ForEachPatternScope>(this, stmt);
 }
 
@@ -1333,7 +1333,7 @@ void AbstractPatternEntryScope::forEachVarDeclWithLocalizableAccessors(
     ScopeCreator &scopeCreator, function_ref<void(VarDecl *)> foundOne) const {
   getPatternEntry().getPattern()->forEachVariable([&](VarDecl *var) {
     if (llvm::any_of(var->getAllAccessors(),
-                     [&](AccessorDecl *a) { return isLocalizable(*a); }))
+                     [&](AccessorDecl *a) { return isLocalizable(a); }))
       foundOne(var);
   });
 }
@@ -1631,12 +1631,12 @@ void ASTScopeImpl::setChildrenCountWhenLastExpanded() {
 }
 
 bool BraceStmtScope::shouldCreateScope(const BraceStmt *const bs) {
-  return isLocalizable(*bs);
+  return isLocalizable(bs);
 }
 
 bool AbstractFunctionDeclScope::shouldCreateAccessorScope(
     const AccessorDecl *const ad) {
-  return isLocalizable(*ad);
+  return isLocalizable(ad);
 }
 
 #pragma mark verification
