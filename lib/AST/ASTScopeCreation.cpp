@@ -334,8 +334,8 @@ public:
       if (auto *specializeAttr = dyn_cast<SpecializeAttr>(attr))
         sortedSpecializeAttrs.push_back(specializeAttr);
     }
-    sortBySourceRange(sortedSpecializeAttrs);
-    for (auto *specializeAttr : sortedSpecializeAttrs)
+    // TODO: rm extra copy
+    for (auto *specializeAttr : sortBySourceRange(sortedSpecializeAttrs))
       fn(specializeAttr);
   }
 
