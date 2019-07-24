@@ -474,9 +474,12 @@ public:
 
 public:
   /// Return true if scope tree contains all the decl contexts in the AST
-  bool containsAllDeclContextsFromAST() const {
+  /// May modify the scope tree in order to update obsolete scopes.
+  bool containsAllDeclContextsFromAST() {
     auto allDeclContexts = findDeclContextsInAST();
     llvm::DenseSet<const DeclContext *> bogusDCs;
+    sourceFileScope->preOrderDo(
+        [&](ASTScopeImpl *scope) { scope->reexpandIfObsolete(*this); });
     sourceFileScope->postOrderDo([&](ASTScopeImpl *scope) {
       if (auto *dc = scope->getDeclContext().getPtrOrNull()) {
         auto iter = allDeclContexts.find(dc);
@@ -1449,8 +1452,6 @@ void IterableTypeScope::expandBody(ScopeCreator &scopeCreator) {
   for (auto n : scopeCreator.expandInactiveClausesSortAndCullElementsOrMembers(
            asNodeVector(getIterableDeclContext().get()->getMembers())))
     scopeCreator.createScopeFor(n, this);
-  explicitMemberCount =
-      getIterableDeclContext().get()->getExplicitMemberCount();
 }
 
 #pragma mark - reexpandIfObsolete
@@ -1528,12 +1529,12 @@ bool IterableTypeBodyPortion::isCurrent(const IterableTypeScope *s) const {
 }
 
 void IterableTypeScope::makeBodyCurrent() {
-  explicitMemberCount =
-      getIterableDeclContext().get()->getExplicitMemberCount();
+  localizableMemberCount =
+      getIterableDeclContext().get()->getLocalizableMemberCount();
 }
 bool IterableTypeScope::isBodyCurrent() const {
-  return explicitMemberCount ==
-         getIterableDeclContext().get()->getExplicitMemberCount();
+  return localizableMemberCount ==
+         getIterableDeclContext().get()->getLocalizableMemberCount();
 }
 
 void AbstractFunctionBodyScope::beCurrent() {

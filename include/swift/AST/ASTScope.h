@@ -188,6 +188,7 @@ private:
   NullablePtr<ASTScopeImpl> getPriorSibling() const;
 
 public:
+  void preOrderDo(function_ref<void(ASTScopeImpl *)>);
   void postOrderDo(function_ref<void(ASTScopeImpl *)>);
 
 #pragma mark - source ranges
@@ -700,7 +701,7 @@ class IterableTypeScope : public GenericTypeScope {
   /// constructed, and they can be out of order. Detect this happening by
   /// remembering the member count.
   /// TODO: unify with \c numberOfDeclsAlreadySeen
-  unsigned explicitMemberCount = 0;
+  unsigned localizableMemberCount = 0;
 
 public:
   IterableTypeScope(const Portion *p) : GenericTypeScope(p) {}

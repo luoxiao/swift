@@ -253,6 +253,12 @@ ExtensionScope::getCorrespondingNominalTypeDecl() const {
   return decl->getExtendedNominal();
 }
 
+void ASTScopeImpl::preOrderDo(function_ref<void(ASTScopeImpl *)> fn) {
+  fn(this);
+  for (auto *child : getChildren())
+    child->preOrderDo(fn);
+}
+
 void ASTScopeImpl::postOrderDo(function_ref<void(ASTScopeImpl *)> fn) {
   for (auto *child : getChildren())
     child->postOrderDo(fn);

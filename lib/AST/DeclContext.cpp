@@ -764,8 +764,8 @@ void IterableDeclContext::addMemberSilently(Decl *member, Decl *hint) const {
 }
 
 void IterableDeclContext::updateMemberCount(const Decl *member) {
-  if (!member->isImplicit())
-    ++explicitMemberCount;
+  if (member->getStartLoc().isValid())
+    ++localizableMemberCount;
 }
 
 void IterableDeclContext::setMemberLoader(LazyMemberLoader *loader,

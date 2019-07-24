@@ -694,10 +694,10 @@ class IterableDeclContext {
 
   /// Because \c parseDelayedDecl and lazy member adding can add members *after*
   /// an \c ASTScope tree is created, there must be some way for the tree to
-  /// detect when an (explicit) member has been added. A bit would suffice, but
-  /// would be more fragile, The scope code could count the members each time,
-  /// but I think it's a better trade to just keep a count here.
-  unsigned explicitMemberCount = 0;
+  /// detect when a (localizable) member has been added. A bit would suffice,
+  /// but would be more fragile, The scope code could count the members each
+  /// time, but I think it's a better trade to just keep a count here.
+  unsigned localizableMemberCount = 0;
 
   template<class A, class B, class C>
   friend struct ::llvm::cast_convert_val;
@@ -728,8 +728,8 @@ public:
   /// is inserted immediately after the hint.
   void addMember(Decl *member, Decl *hint = nullptr);
 
-  /// See \c explicitMemberCount
-  unsigned getExplicitMemberCount() const { return explicitMemberCount; }
+  /// See \c localizableMemberCount
+  unsigned getLocalizableMemberCount() const { return localizableMemberCount; }
 
   /// Check whether there are lazily-loaded members.
   bool hasLazyMembers() const {
