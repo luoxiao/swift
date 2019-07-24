@@ -129,11 +129,11 @@ bool ASTScopeImpl::verifyThatThisNodeComeAfterItsPriorSibling() const {
   print(out);
   out << "\n***Parent node***\n";
   getParent().get()->print(out);
-  llvm::errs() << "\n\nsource:\n"
-               << getSourceManager()
-                      .getRangeForBuffer(
-                          getSourceFile()->getBufferID().getValue())
-                      .str();
+  //  llvm::errs() << "\n\nsource:\n"
+  //               << getSourceManager()
+  //                      .getRangeForBuffer(
+  //                          getSourceFile()->getBufferID().getValue())
+  //                      .str();
   assert(false && "unexpected out-of-order nodes");
 }
 
@@ -296,8 +296,11 @@ SourceRange AbstractFunctionDeclScope::getChildlessSourceRange(
 SourceRange
 ParameterListScope::getChildlessSourceRange(const bool omitAssertions) const {
   const auto rangeForGoodInput = getSourceRangeOfEnclosedParams(omitAssertions);
-  return SourceRange(rangeForGoodInput.Start,
+  auto r = SourceRange(rangeForGoodInput.Start,
                      fixupEndForBadInput(rangeForGoodInput));
+  assert(getSourceManager().rangeContains(getParent().get()->getChildlessSourceRange(true), r) &&
+         "Parameters not within function?!");
+  return r;
 }
 
 SourceLoc ParameterListScope::fixupEndForBadInput(

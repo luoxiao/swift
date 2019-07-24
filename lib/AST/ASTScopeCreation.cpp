@@ -1075,8 +1075,12 @@ void AbstractFunctionDeclScope::expandAScopeThatDoesNotCreateANewInsertionPoint(
     leaf = scopeCreator.createGenericParamScopes(decl, decl->getGenericParams(),
                                                  leaf);
     if (isLocalizable(decl) && getParamsSourceLoc(decl).isValid()) {
-      leaf = scopeCreator.createSubtree<ParameterListScope>(
-          leaf, decl->getParameters(), nullptr);
+        // swift::createDesignatedInitOverride just clones the parameters, so they
+        // end up with a bogus SourceRange, maybe *before* the start of the function.
+      if (!decl->isImplicit()) {
+        leaf = scopeCreator.createSubtree<ParameterListScope>(
+                                                              leaf, decl->getParameters(), nullptr);
+      }
     }
   }
   // Create scope for the body.
