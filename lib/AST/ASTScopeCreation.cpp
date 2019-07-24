@@ -40,13 +40,6 @@ template <typename Rangeable>
 static SourceRange getRangeableSourceRange(const Rangeable *const p) {
   return p->getSourceRange();
 }
-template <typename Rangeable>
-static SourceRange getRangeableSourceRange(Rangeable *const p) {
-  return p->getSourceRange();
-}
-static SourceRange getRangeableSourceRange(SpecializeAttr *a) {
-  return a->getRange();
-}
 static SourceRange getRangeableSourceRange(const SpecializeAttr *a) {
   return a->getRange();
 }
