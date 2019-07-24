@@ -490,9 +490,10 @@ public:
     for (const auto &p : allDeclContexts) {
       if (p.second == 0) {
         if (auto *d = p.first->getAsDecl()) {
-          llvm::errs() << "\nASTScope tree omitted: " << p.first << ":\n";
+          llvm::errs() << "\nASTScope tree omitted DeclContext: " << p.first
+                       << ":\n";
           p.first->printContext(llvm::errs());
-          llvm::errs() << "\n" << d << ": ";
+          llvm::errs() << "\ngetAsDecl() -> " << d << ": ";
           d->dump(llvm::errs());
           llvm::errs() << "\n";
           foundOmission = true;
